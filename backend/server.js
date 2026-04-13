@@ -13,15 +13,13 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // Environment selection
-const dbUrl =
-  process.env.NODE_ENV === 'production'
-    ? process.env.MONGODB_URI_PROD
-    : process.env.MONGODB_URI_DEV;
+const dbUrl = process.env.MONGODB_URI || process.env.MONGODB_URI_DEV;
 
 // MongoDB Connection
 mongoose.connect(dbUrl)
   .then(() => {
-    console.log(`✅ Connected to MongoDB (${process.env.NODE_ENV || 'development'})`);
+    const dbType = process.env.MONGODB_URI ? 'Production' : 'Development';
+    console.log(`✅ Connected to MongoDB (${dbType} environment)`);
   })
   .catch(err => {
     console.error('❌ MongoDB Connection Error:', err.message);
