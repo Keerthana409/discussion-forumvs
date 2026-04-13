@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // Environment selection
-const dbUrl = process.env.MONGODB_URI || process.env.MONGODB_URI_DEV;
+const dbUrl = process.env.MONGODB_URI_PROD || process.env.MONGODB_URI || process.env.MONGODB_URI_DEV;
 
 // MongoDB Connection
 mongoose.connect(dbUrl)
