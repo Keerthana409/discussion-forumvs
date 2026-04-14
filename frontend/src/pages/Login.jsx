@@ -18,6 +18,14 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
+    if (activeTab === 'admin') {
+      if (formData.email !== 'admin@gmail.com' || formData.password !== 'admin123') {
+        setError('Unauthorized: Only the system administrator can log in through this panel.');
+        setIsLoading(false);
+        return;
+      }
+    }
+
     if (activeTab === 'signup') {
       if (formData.name.trim().length < 4) {
         setError('Name must contain at least 4 letters.');
@@ -49,7 +57,12 @@ const Login = () => {
 
       localStorage.setItem('nexus_token', res.token);
       localStorage.setItem('nexus_user', JSON.stringify(res.user));
-      navigate('/app');
+      
+      if (res.token) {
+        navigate('/app');
+      } else {
+        throw new Error('Authentication succeeded but no token was provided. Please contact support.');
+      }
     } catch (err) {
       setError(err.message || 'Authentication failed. Please check credentials.');
     } finally {

@@ -107,6 +107,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [newComment, setNewComment] = useState('');
   const [summaryMode, setSummaryMode] = useState(null);
   const [actionProcessing, setActionProcessing] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const { showToast } = useToast();
 
   React.useEffect(() => {
@@ -147,7 +148,13 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
 
   const handleAdminStatus = async (action) => {
     if (actionProcessing) return;
-    if (action === 'remove' && !window.confirm("Are you sure you want to PERMANENTLY delete this post?")) return;
+    
+    // Inline confirmation logic for permanent removals
+    if (action === 'remove' && !confirmRemove) {
+        setConfirmRemove(true);
+        return;
+    }
+
     setActionProcessing('admin');
     try {
         if (action === 'remove') {
@@ -156,11 +163,16 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
             setLocalPost({ ...localPost, isDeletedLocally: true });
         } else {
             const updated = await api.patch(`/admin/post/${localPost._id}`, { action });
-            showToast(`Post successfully marked as ${action}`, "success");
             setLocalPost(updated);
+            showToast(`Status updated to ${action}`, "success");
         }
-    } catch(err) { showToast(err.message || "Admin action failed", "error"); }
-    finally { setActionProcessing(null); }
+    } catch (err) {
+        showToast(err.message || "Admin action failed", "error");
+    }
+    finally { 
+        setActionProcessing(null); 
+        setConfirmRemove(false);
+    }
   };
 
   const handlePostClick = async () => {
@@ -186,15 +198,9 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   let statusLabel = null;
   let borderLeftStyle = '';
   if (localPost.status === 'spam') {
-        const canAdminRemove = currentUser?.role === 'admin';
         statusLabel = (
-          <span 
-            className={`badge badge-danger ${canAdminRemove ? 'clickable-badge' : ''}`} 
-            style={canAdminRemove ? { cursor: 'pointer', border: '1px solid white' } : {}}
-            title={canAdminRemove ? "Click to Remove this Spam Post" : ""}
-            onClick={(e) => { e.stopPropagation(); canAdminRemove && handleAdminStatus('remove'); }}
-          >
-            ⚠️ Spam {canAdminRemove && <i className="fa-solid fa-trash-can" style={{marginLeft: '4px'}}></i>}
+          <span className="badge badge-danger">
+            ⚠️ Spam
           </span>
         );
         borderLeftStyle = "4px solid var(--danger)";
@@ -298,9 +304,21 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                       <button className="action-btn admin-approve-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
                         <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {actionProcessing === 'admin' ? 'Wait...' : 'Approve'}
                       </button>
-                      <button className="action-btn admin-reject-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('remove')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
-                        <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : 'fa-trash-can'}`}></i> {actionProcessing === 'admin' ? 'Wait...' : (localPost.status === 'spam' ? 'Delete Post' : 'Reject')}
+                      <button 
+                        className="action-btn admin-reject-btn" 
+                        disabled={actionProcessing === 'admin'} 
+                        onClick={() => handleAdminStatus('remove')} 
+                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}
+                      >
+                        <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : (confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can')}`}></i> 
+                        {' '}
+                        {actionProcessing === 'admin' ? 'Wait...' : (confirmRemove ? 'Confirm?' : (localPost.status === 'spam' ? 'Delete Post' : 'Reject'))}
                       </button>
+                      {confirmRemove && (
+                        <button className="action-btn" onClick={() => setConfirmRemove(false)} style={{ color: 'var(--text-muted)' }}>
+                          Cancel
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>
@@ -309,9 +327,21 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                           <i className="fa-solid fa-triangle-exclamation"></i> Mark Spam
                         </button>
                       )}
-                      <button className="action-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('remove')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
-                        <i className="fa-solid fa-trash-can"></i> Delete
+                      <button 
+                        className="action-btn" 
+                        disabled={actionProcessing === 'admin'} 
+                        onClick={() => handleAdminStatus('remove')} 
+                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      >
+                        <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`}></i>
+                        {' '}
+                        {confirmRemove ? 'Confirm Delete?' : 'Delete'}
                       </button>
+                      {confirmRemove && (
+                        <button className="action-btn" onClick={() => setConfirmRemove(false)} style={{ color: 'var(--text-muted)' }}>
+                          Cancel
+                        </button>
+                      )}
                     </>
                   )}
                 </>

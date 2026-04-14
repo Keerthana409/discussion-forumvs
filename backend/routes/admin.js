@@ -39,8 +39,8 @@ router.get('/stats', auth, adminAuth, async (req, res) => {
 });
 
 router.patch('/post/:id', auth, adminAuth, async (req, res) => {
+    const { action } = req.body; 
     try {
-        const { action } = req.body; 
         let post = await Post.findById(req.params.id);
         if(!post) return res.status(404).json({ msg: 'Post not found' });
 
@@ -60,6 +60,7 @@ router.patch('/post/:id', auth, adminAuth, async (req, res) => {
         await post.save();
         res.json(post);
     } catch(err) {
+        console.error(`[AdminAPI] Error patching post: ${err.message}`);
         res.status(500).send('Server Error');
     }
 });
@@ -67,9 +68,12 @@ router.patch('/post/:id', auth, adminAuth, async (req, res) => {
 router.delete('/post/:id', auth, adminAuth, async (req, res) => {
     try {
         const post = await Post.findByIdAndDelete(req.params.id);
-        if(!post) return res.status(404).json({ msg: 'Post not found' });
+        if(!post) {
+            return res.status(404).json({ msg: 'Post not found' });
+        }
         res.json({ msg: 'Post permanently deleted' });
     } catch(err) {
+        console.error(`[AdminAPI] Error deleting post: ${err.message}`);
         res.status(500).send('Server Error');
     }
 });

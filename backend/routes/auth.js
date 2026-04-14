@@ -6,6 +6,9 @@ const User = require('../models/User');
 
 // @route   POST api/auth/signup
 router.post('/signup', async (req, res) => {
+    if (!process.env.JWT_SECRET) {
+        return res.status(500).json({ msg: 'Server configuration error' });
+    }
     const { username, email, password } = req.body;
     try {
         if (!email.endsWith('@gmail.com')) {
@@ -34,16 +37,16 @@ router.post('/signup', async (req, res) => {
 
 // @route   POST api/auth/login
 router.post('/login', async (req, res) => {
+    if (!process.env.JWT_SECRET) {
+        return res.status(500).json({ msg: 'Server configuration error' });
+    }
     const { email, password } = req.body;
     try {
         // Handle admin login specifically as requested
         if (email === 'admin@gmail.com' && password === 'admin123') {
             const payload = { user: { id: 'admin_id', username: 'Administrator', role: 'admin' } };
             return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 360000 }, (err, token) => {
-                if (err) {
-                    console.error("JWT Sign error:", err);
-                    return res.status(500).json({ msg: 'Server Error' });
-                }
+                if (err) return res.status(500).json({ msg: 'Server Error' });
                 res.json({ token, user: payload.user });
             });
         }
