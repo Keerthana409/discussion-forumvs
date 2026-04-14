@@ -409,7 +409,17 @@ body.dark-mode .password-toggle:hover {
 .post-tag:hover { background: var(--border-color); }
 .post-title { font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-dark); font-weight: 600; }
 .post-body { color: var(--text-dark); font-size: 0.95rem; margin-bottom: 1rem; overflow-wrap: break-word; }
-.post-attached-image { width: 100%; max-height: 400px; object-fit: cover; border-radius: var(--radius); margin-bottom: 1rem; transition: transform 0.2s ease-in-out; border: 1px solid var(--border-color); display: block; }
+.post-attached-image { 
+    width: 100%; 
+    max-height: 500px; 
+    object-fit: contain; 
+    background-color: var(--secondary-color); 
+    border-radius: var(--radius); 
+    margin-bottom: 1rem; 
+    transition: transform 0.2s ease-in-out; 
+    border: 1px solid var(--border-color); 
+    display: block; 
+}
 .post-attached-image:hover { transform: scale(1.01); }
 
 .post-actions { display: flex; gap: 0.5rem; flex-wrap: wrap;}
