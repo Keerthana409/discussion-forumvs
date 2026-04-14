@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Forum from './pages/Forum';
+import { ToastProvider } from './context/ToastContext';
 
 function App() {
   const [theme, setTheme] = useState(localStorage.getItem('nexus_theme') || 'light');
@@ -26,19 +27,21 @@ function App() {
   };
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route 
-          path="/app" 
-          element={
-            <PrivateRoute>
-              <Forum theme={theme} toggleTheme={toggleTheme} />
-            </PrivateRoute>
-          } 
-        />
-      </Routes>
-    </Router>
+    <ToastProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route 
+            path="/app" 
+            element={
+              <PrivateRoute>
+                <Forum theme={theme} toggleTheme={toggleTheme} />
+              </PrivateRoute>
+            } 
+          />
+        </Routes>
+      </Router>
+    </ToastProvider>
   );
 }
 

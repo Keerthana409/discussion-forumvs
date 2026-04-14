@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }) => {
   const [notifs, setNotifs] = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const navigate = useNavigate();
   const panelRef = useRef(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (currentUser) {
       fetchNotifs();
-      const interval = setInterval(fetchNotifs, 5000);
+      const interval = setInterval(fetchNotifs, 20000);
       return () => clearInterval(interval);
     }
   }, [currentUser]);
@@ -52,15 +54,30 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }
     }
   };
 
-  const handleAdminAction = async (postId, action) => {
+  const handleAdminAction = async (postId, action, notificationId) => {
     try {
       await api.patch(`/admin/post/${postId}`, { action });
-      alert(`Post has been successfully marked as ${action}.`);
+      
+      // Delete the notification after successful action
+      if (notificationId) {
+        await api.delete(`/notifications/${notificationId}`);
+      }
+      
+      showToast(`Post has been successfully marked as ${action}.`, 'success');
       setShowNotifPanel(false);
       fetchNotifs();
       refreshPosts();
     } catch (err) {
-      alert("Failed action: " + err.message);
+      showToast("Failed action: " + err.message, 'error');
+    }
+  };
+
+  const handleNotifClick = async (notifId) => {
+    try {
+      await api.delete(`/notifications/${notifId}`);
+      fetchNotifs();
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -104,13 +121,22 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }
                   <li style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center' }}>No notifications yet.</li>
                 ) : (
                   notifs.map(n => (
-                    <li key={n._id || Math.random()} className={`notif-item ${!n.isRead ? 'unread' : ''}`}>
+                    <li 
+                      key={n._id || Math.random()} 
+                      className={`notif-item ${!n.isRead ? 'unread' : ''}`}
+                      onClick={() => handleNotifClick(n._id)}
+                      style={{ cursor: 'pointer' }}
+                    >
                       <div><strong>{n.sender}</strong> {n.context}</div>
                       <div className="notif-meta">{new Date(n.timestamp).toLocaleString()}</div>
                       {(n.type === 'admin_spam_alert' || n.type === 'admin_report_alert') && currentUser?.role === 'admin' && (
                         <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-sm btn-success" onClick={() => handleAdminAction(n.postId, 'safe')} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>Approve</button>
-                          <button className="btn btn-sm btn-danger" onClick={() => handleAdminAction(n.postId, 'remove')} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>Reject</button>
+                          <button className="btn btn-sm btn-success" onClick={() => handleAdminAction(n.postId, 'safe', n._id)} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+                            <i className="fa-solid fa-check"></i> {n.type === 'admin_spam_alert' ? 'Not Spam' : 'Approve'}
+                          </button>
+                          <button className="btn btn-sm btn-danger" onClick={() => handleAdminAction(n.postId, 'remove', n._id)} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+                            <i className={`fa-solid ${n.type === 'admin_spam_alert' ? 'fa-trash-can' : 'fa-xmark'}`}></i> {n.type === 'admin_spam_alert' ? 'Remove Post' : 'Reject'}
+                          </button>
                         </div>
                       )}
                     </li>

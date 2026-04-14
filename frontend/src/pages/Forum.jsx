@@ -1,32 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 import CreatePost from '../components/CreatePost';
 import PostCard from '../components/PostCard';
+import SkeletonCard from '../components/SkeletonCard';
 import TimeTrackingModal from '../components/TimeTrackingModal';
 import api from '../services/api';
 
 const Forum = ({ theme, toggleTheme }) => {
   const [posts, setPosts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [filter, setFilter] = useState('latest');
   const [searchQuery, setSearchQuery] = useState('');
   const [tagFilter, setTagFilter] = useState(null);
   const [isTimeModalOpen, setTimeModalOpen] = useState(false);
   const [usageWarning, setUsageWarning] = useState(false);
+  
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const observer = useRef();
 
   const currentUser = JSON.parse(localStorage.getItem('nexus_user') || 'null');
 
+  const fetchPosts = useCallback(async (pageNum = 1, isInitial = false) => {
+    if (isInitial) {
+        setIsLoading(true);
+    } else {
+        setIsFetchingMore(true);
+    }
+
+    try {
+      const response = await api.get(`/posts?page=${pageNum}&limit=8`);
+      
+      // Robust Handling: Check if response is the new object format or the old array format
+      let newPosts = [];
+      let moreAvailable = false;
+      
+      if (Array.isArray(response)) {
+          newPosts = response;
+          moreAvailable = false; // Old backend doesn't support pagination
+      } else if (response && response.posts) {
+          newPosts = response.posts;
+          moreAvailable = response.hasMore;
+      }
+      
+      setPosts(prev => pageNum === 1 ? newPosts : [...prev, ...newPosts]);
+      setHasMore(moreAvailable);
+      setPage(pageNum);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (isInitial) {
+          setIsLoading(false);
+      } else {
+          setIsFetchingMore(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    fetchPosts();
+    fetchPosts(1, true);
     
     // Usage tracker logic
     let sessionMinutes = parseInt(localStorage.getItem('df_sessionMinutes')) || 0;
-    
     const usageInterval = setInterval(async () => {
       sessionMinutes++;
       localStorage.setItem('df_sessionMinutes', sessionMinutes);
-      
-      if (sessionMinutes >= 30) setUsageWarning(true);
-
+      if (sessionMinutes > 0 && sessionMinutes % 30 === 0) setUsageWarning(true);
       try {
         await api.post('/usage');
       } catch (e) {
@@ -35,18 +76,27 @@ const Forum = ({ theme, toggleTheme }) => {
     }, 60000);
 
     return () => clearInterval(usageInterval);
-  }, []);
+  }, [fetchPosts]);
 
-  const fetchPosts = async () => {
-    try {
-      const data = await api.get('/posts');
-      setPosts(data);
-    } catch (err) {
-      console.error(err);
-    }
+  // Infinite Scroll Observer
+  const lastPostRef = useCallback(node => {
+    if (isLoading || isFetchingMore) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        fetchPosts(page + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [isLoading, isFetchingMore, hasMore, page, fetchPosts]);
+
+  const resetAndFetch = () => {
+      setPage(1);
+      setPosts([]);
+      fetchPosts(1, true);
   };
 
-  const getFilteredPosts = () => {
+  const filteredPosts = useMemo(() => {
     let filtered = posts.filter(p => p.status !== 'removed' && p.status !== 'hidden');
 
     if (searchQuery) {
@@ -65,7 +115,7 @@ const Forum = ({ theme, toggleTheme }) => {
     if (filter === 'top') {
       filtered.sort((a,b) => (b.likes - (b.dislikes || 0)) - (a.likes - (a.dislikes || 0)));
     } else if (filter === 'flagged') {
-      filtered = filtered.filter(p => p.status === 'under review');
+      filtered = filtered.filter(p => ['under review', 'duplicate', 'similar', 'spam'].includes(p.status));
       filtered.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
     } else if (filter === 'safe') {
       filtered = filtered.filter(p => p.status === 'safe');
@@ -74,12 +124,10 @@ const Forum = ({ theme, toggleTheme }) => {
       filtered.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
     }
 
-    // Pinned logic
     const pinned = filtered.filter(p => p.isPinned);
     const unpinned = filtered.filter(p => !p.isPinned);
-    
     return [...pinned, ...unpinned];
-  };
+  }, [posts, filter, searchQuery, tagFilter]);
 
   return (
     <div className="app-body">
@@ -88,7 +136,7 @@ const Forum = ({ theme, toggleTheme }) => {
         toggleTheme={toggleTheme} 
         currentUser={currentUser} 
         openTimeModal={() => setTimeModalOpen(true)}
-        refreshPosts={fetchPosts}
+        refreshPosts={resetAndFetch}
       />
 
       <div className="app-container">
@@ -118,27 +166,65 @@ const Forum = ({ theme, toggleTheme }) => {
             </div>
           </div>
 
-          {tagFilter && (
-            <div style={{ padding: '0.5rem', background: 'var(--primary-color)', color: 'white', borderRadius: '4px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between' }}>
-                <span>Filtering by Tag: <strong>{tagFilter}</strong></span>
-                <span style={{ cursor: 'pointer' }} onClick={() => setTagFilter(null)}><i className="fa-solid fa-xmark"></i> Clear</span>
+          {(searchQuery || tagFilter) && (
+            <div className="search-summary active" style={{ padding: '0.8rem', background: 'rgba(255, 69, 0, 0.05)', border: '1px solid rgba(255, 69, 0, 0.2)', borderRadius: 'var(--radius)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', animation: 'slideUpFade 0.4s ease' }}>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-dark)' }}>
+                    <i className="fa-solid fa-circle-info" style={{ color: 'var(--primary-color)', marginRight: '8px' }}></i>
+                    Found <strong>{filteredPosts.length}</strong> posts {searchQuery && <span>matching "<strong>{searchQuery}</strong>"</span>} {tagFilter && <span>with tag #<strong>{tagFilter}</strong></span>}
+                </span>
+                <button onClick={() => { setSearchQuery(''); setTagFilter(null); }} style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>Clear All</button>
             </div>
           )}
 
-          <CreatePost refreshPosts={fetchPosts} />
+          <CreatePost refreshPosts={resetAndFetch} />
 
           <div id="posts-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {getFilteredPosts().map(post => (
-              <PostCard 
-                key={post._id} 
-                post={post} 
-                currentUser={currentUser} 
-                refreshPosts={fetchPosts}
-                setTagFilter={setTagFilter}
-                searchQuery={searchQuery}
-              />
-            ))}
-            {getFilteredPosts().length === 0 && (
+            {isLoading ? (
+                <>
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </>
+            ) : filteredPosts.length > 0 ? (
+                <>
+                    {filteredPosts.map((post, index) => {
+                        if (filteredPosts.length === index + 1) {
+                            return (
+                                <div ref={lastPostRef} key={post._id}>
+                                    <PostCard 
+                                        post={post} 
+                                        currentUser={currentUser} 
+                                        refreshPosts={resetAndFetch}
+                                        setTagFilter={setTagFilter}
+                                        searchQuery={searchQuery}
+                                    />
+                                </div>
+                            );
+                        } else {
+                            return (
+                                <PostCard 
+                                    key={post._id} 
+                                    post={post} 
+                                    currentUser={currentUser} 
+                                    refreshPosts={resetAndFetch}
+                                    setTagFilter={setTagFilter}
+                                    searchQuery={searchQuery}
+                                />
+                            );
+                        }
+                    })}
+                    {isFetchingMore && (
+                        <div style={{ padding: '1rem', textAlign: 'center' }}>
+                            <SkeletonCard />
+                        </div>
+                    )}
+                    {!hasMore && filteredPosts.length > 5 && (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                            <i className="fa-solid fa-check-circle"></i> You've reached the end of the forum.
+                        </div>
+                    )}
+                </>
+            ) : (
                 <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No posts found.
                 </div>

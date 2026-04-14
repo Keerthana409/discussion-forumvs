@@ -553,3 +553,93 @@ body.dark-mode .password-toggle:hover {
     max-height: 90vh;
     overflow-y: auto;
 }
+
+/* Premium UI - Skeletons */
+.skeleton {
+    background: #e2e8f0;
+    background: linear-gradient(
+        90deg, 
+        rgba(226, 232, 240, 1) 25%, 
+        rgba(241, 245, 249, 1) 50%, 
+        rgba(226, 232, 240, 1) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+    border-radius: 4px;
+}
+
+body.dark-mode .skeleton {
+    background: #2d3748;
+    background: linear-gradient(
+        90deg, 
+        rgba(45, 55, 72, 1) 25%, 
+        rgba(74, 85, 104, 1) 50%, 
+        rgba(45, 55, 72, 1) 75%
+    );
+    background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-text { height: 1rem; width: 100%; margin-bottom: 0.5rem; }
+.skeleton-title { height: 1.5rem; width: 80%; margin-bottom: 1rem; }
+.skeleton-avatar { height: 40px; width: 40px; border-radius: 50%; }
+
+/* Premium UI - Toasts */
+.toast-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    z-index: 2000;
+}
+
+.toast {
+    padding: 1rem 1.5rem;
+    border-radius: 10px;
+    background: var(--bg-card);
+    color: var(--text-dark);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 250px;
+    transform: translateX(120%);
+    animation: slideIn 0.3s forwards cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 5px solid var(--primary-color);
+}
+
+.toast.success { border-left-color: var(--success); }
+.toast.error { border-left-color: var(--danger); }
+.toast.info { border-left-color: #3b82f6; }
+
+@keyframes slideIn {
+    to { transform: translateX(0); }
+}
+
+.toast.fade-out {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.5s ease;
+}
+
+/* Premium UI - Entry Animations */
+@keyframes slideUpFade {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.post-card-animate {
+    animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

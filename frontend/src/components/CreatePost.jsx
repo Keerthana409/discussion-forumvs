@@ -42,10 +42,11 @@ const CreatePost = ({ refreshPosts }) => {
         tags: tagsArray,
         image: imagePreview
       });
+      showToast("Post published successfully!", "success");
       refreshPosts();
       handleCancel();
     } catch (err) {
-      alert("Failed to create post: " + err.message);
+      showToast("Failed to create post: " + err.message, "error");
     }
   };
 

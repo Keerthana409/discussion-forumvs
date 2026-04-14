@@ -7,6 +7,7 @@ const Login = () => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
@@ -16,6 +17,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
       let res;
@@ -38,6 +40,8 @@ const Login = () => {
       navigate('/app');
     } catch (err) {
       setError(err.message || 'Authentication failed. Please check credentials.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -134,8 +138,13 @@ const Login = () => {
           <button 
             type="submit" 
             className={`btn-modern auth-submit-btn`}
+            disabled={isLoading}
           >
-            {activeTab === 'signup' ? 'Create Account' : (activeTab === 'admin' ? 'Enter Dashboard' : 'Login')}
+            {isLoading ? (
+              <><i className="fa-solid fa-spinner fa-spin"></i> Processing...</>
+            ) : (
+              activeTab === 'signup' ? 'Create Account' : (activeTab === 'admin' ? 'Enter Dashboard' : 'Login')
+            )}
           </button>
         </form>
       </div>

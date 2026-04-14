@@ -44,8 +44,18 @@ const checkBadWords = (text) => /hate|kill|scam|abuse|fraud|jerk|loser/i.test(te
 
 router.get('/', async (req, res) => {
     try {
-        const posts = await Post.find().sort({ timestamp: -1 });
-        res.json(posts);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        const posts = await Post.find().sort({ timestamp: -1 }).skip(skip).limit(limit);
+        const total = await Post.countDocuments();
+        
+        res.json({
+            posts,
+            hasMore: skip + posts.length < total,
+            total
+        });
     } catch (err) {
         res.status(500).send('Server Error');
     }
@@ -58,29 +68,38 @@ router.post('/', auth, async (req, res) => {
         
         const fullText = title + " " + content;
         let maxSimilarity = 0;
+        let similarPostId = null;
         
         allPosts.forEach(p => {
             const sim = calculateSimilarity(fullText, p.title + " " + p.content);
-            if(sim > maxSimilarity) maxSimilarity = sim;
+            if(sim > maxSimilarity) {
+                maxSimilarity = sim;
+                similarPostId = p._id;
+            }
         });
 
         const spamScore = calculateSpamScore(fullText);
         const hasBadWords = checkBadWords(fullText);
 
         let finalStatus = 'safe';
+        let foundSimilarTo = null;
+
         if (spamScore > 3 || hasBadWords) {
             finalStatus = 'spam';
         } else if (maxSimilarity > 80) {
             finalStatus = 'duplicate';
+            foundSimilarTo = similarPostId;
         } else if (maxSimilarity > 60) {
             finalStatus = 'similar';
+            foundSimilarTo = similarPostId;
         }
 
         const newPost = new Post({
             title, content, tags, image,
             author: req.user.username,
             spamScore,
-            status: finalStatus
+            status: finalStatus,
+            similarTo: foundSimilarTo
         });
 
         const post = await newPost.save();
@@ -144,26 +163,71 @@ router.post('/:id/vote', auth, async (req, res) => {
 // Reaction
 router.post('/:id/react', auth, async (req, res) => {
     try {
-        const type = req.body.type;
+        const { type } = req.body;
+        const validTypes = ['fire', 'laugh', 'heart', 'sad'];
+        if (!validTypes.includes(type)) return res.status(400).json({ msg: 'Invalid reaction type' });
+
         let post = await Post.findById(req.params.id);
-        if (type !== 'fire' && type !== 'laugh') return res.status(400).json({ msg: 'Invalid reaction type' });
+        if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-        const update = {};
-        update[`reactions.${type}`] = 1;
-        const updatedPost = await Post.findOneAndUpdate(
-            { _id: req.params.id, reactedUsers: { $ne: req.user.username } },
-            { $inc: update, $push: { reactedUsers: req.user.username } },
-            { new: true }
-        );
+        // Robust initialization for counters
+        if (!post.reactions) post.reactions = {};
+        validTypes.forEach(t => {
+            if (post.reactions[t] === undefined || post.reactions[t] === null) {
+                post.set(`reactions.${t}`, 0);
+            }
+        });
 
-        if (!updatedPost) {
-            return res.status(400).json({ msg: 'Already reacted to this post' });
+        if (!post.reactionDetails) post.reactionDetails = [];
+        if (!post.reactedUsers) post.reactedUsers = [];
+
+        const existingIndex = post.reactionDetails.findIndex(r => r.username === req.user.username);
+
+        if (existingIndex > -1) {
+            const oldType = post.reactionDetails[existingIndex].type;
+
+            if (oldType === type) {
+                // TOGGLE OFF
+                const currentVal = post.reactions[type] || 0;
+                post.set(`reactions.${type}`, Math.max(0, currentVal - 1));
+                post.reactionDetails.splice(existingIndex, 1);
+                post.reactedUsers = post.reactedUsers.filter(u => u !== req.user.username);
+            } else {
+                // SWITCH
+                const oldVal = post.reactions[oldType] || 0;
+                const newVal = post.reactions[type] || 0;
+                post.set(`reactions.${oldType}`, Math.max(0, oldVal - 1));
+                post.set(`reactions.${type}`, newVal + 1);
+                post.reactionDetails[existingIndex].type = type;
+            }
+        } else {
+            // ADD NEW
+            const currentVal = post.reactions[type] || 0;
+            post.set(`reactions.${type}`, currentVal + 1);
+            post.reactionDetails.push({ username: req.user.username, type });
+            post.reactedUsers.push(req.user.username);
+
+            // Notify author
+            if (req.user.username !== post.author) {
+                try {
+                    await new Notification({ 
+                        recipient: post.author, 
+                        sender: req.user.username, 
+                        type: 'react', 
+                        context: `reacted to your post: "${post.title}"`, 
+                        postId: post._id.toString() 
+                    }).save();
+                } catch (e) {}
+            }
         }
 
-        await new Notification({ recipient: updatedPost.author, sender: req.user.username, type: 'react', context: `reacted to your post: "${updatedPost.title}"`, postId: updatedPost._id.toString() }).save();
+        post.markModified('reactions');
+        post.markModified('reactionDetails');
+        await post.save();
 
-        res.json(updatedPost);
+        res.json(post);
     } catch (err) {
+        console.error(err);
         res.status(500).send('Server Error');
     }
 });

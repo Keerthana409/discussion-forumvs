@@ -22,6 +22,8 @@ router.get('/stats', auth, adminAuth, async (req, res) => {
         const stats = {
             totalPosts: posts.length,
             spamPosts: posts.filter(p => p.status === 'spam').length,
+            duplicatePosts: posts.filter(p => p.status === 'duplicate').length,
+            similarPosts: posts.filter(p => p.status === 'similar').length,
             removedPosts: posts.filter(p => p.status === 'removed').length,
             reportedPosts: posts.filter(p => p.hasReport || p.status === 'under review').length,
             suspiciousUsers: users.filter(u => u.isSuspicious).length

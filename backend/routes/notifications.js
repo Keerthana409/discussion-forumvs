@@ -28,4 +28,17 @@ router.put('/read', auth, async (req, res) => {
     }
 });
 
+// Delete all notifications for a specific post
+router.delete('/post/:postId', auth, async (req, res) => {
+    try {
+        await Notification.deleteMany({ 
+            postId: req.params.postId, 
+            recipient: req.user.username 
+        });
+        res.json({ msg: 'Post notifications cleared' });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
 module.exports = router;

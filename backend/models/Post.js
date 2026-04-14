@@ -16,12 +16,19 @@ const postSchema = new mongoose.Schema({
     comments: [mongoose.Schema.Types.Mixed], // Dynamic schema for nested replies handling mapping to existing format
     reactions: {
         fire: { type: Number, default: 0 },
-        laugh: { type: Number, default: 0 }
+        laugh: { type: Number, default: 0 },
+        heart: { type: Number, default: 0 },
+        sad: { type: Number, default: 0 }
     },
+    reactionDetails: [{ 
+        username: String, 
+        type: { type: String, enum: ['fire', 'laugh', 'heart', 'sad'] } 
+    }],
     reactedUsers: [{ type: String }],
     hasReport: { type: Boolean, default: false },
     reportReason: { type: String },
     reporter: { type: String },
+    similarTo: { type: String }, // ID of the post this is a duplicate/similar of
     timestamp: { type: Date, default: Date.now }
 });
 

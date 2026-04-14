@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const summarizeText = (text, mode = 'short') => {
   if (!text) return "";
@@ -38,12 +39,12 @@ const HighlightedText = ({ text, highlight }) => {
   );
 };
 
-const renderComments = (comments, depth, postId, currentUser, refreshPosts) => {
+const renderComments = (comments, depth, postId, currentUser, refreshPosts, showToast) => {
   if (!comments || comments.length === 0) return null;
-  return comments.map(c => <CommentItem key={c.id} c={c} depth={depth} postId={postId} currentUser={currentUser} refreshPosts={refreshPosts} />);
+  return comments.map(c => <CommentItem key={c.id} c={c} depth={depth} postId={postId} currentUser={currentUser} refreshPosts={refreshPosts} showToast={showToast} />);
 };
 
-const CommentItem = ({ c, depth, postId, currentUser, refreshPosts }) => {
+const CommentItem = ({ c, depth, postId, currentUser, refreshPosts, showToast }) => {
   const [showReplyPanel, setShowReplyPanel] = useState(false);
   const [replyText, setReplyText] = useState('');
 
@@ -53,16 +54,18 @@ const CommentItem = ({ c, depth, postId, currentUser, refreshPosts }) => {
         await api.post(`/posts/${postId}/comment`, { content: replyText, targetCommentId: c.id });
         setReplyText('');
         setShowReplyPanel(false);
+        showToast("Reply posted!", "success");
         refreshPosts();
-    } catch(err) { alert(err.message); }
+    } catch(err) { showToast(err.message, "error"); }
   };
 
   const handleDelete = async () => {
     if(!window.confirm("Are you sure you want to delete this comment?")) return;
     try {
         await api.delete(`/posts/${postId}/comment/${c.id}`);
+        showToast("Comment deleted", "success");
         refreshPosts();
-    } catch(err) { alert("Failed to delete: " + err.message); }
+    } catch(err) { showToast("Failed to delete: " + err.message, "error"); }
   };
 
   const depthClass = depth > 6 ? 'nested-comment-depth-6' : 'nested-comment'; 
@@ -93,7 +96,7 @@ const CommentItem = ({ c, depth, postId, currentUser, refreshPosts }) => {
         </div>
       )}
 
-      {renderComments(c.replies, depth + 1, postId, currentUser, refreshPosts)}
+      {renderComments(c.replies, depth + 1, postId, currentUser, refreshPosts, showToast)}
     </div>
   );
 };
@@ -102,56 +105,100 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [summaryMode, setSummaryMode] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { showToast } = useToast();
 
   const handleVote = async (type) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
     try {
       await api.post(`/posts/${post._id}/vote`, { type });
       refreshPosts();
-    } catch(e) { alert(e.message); }
+    } catch(e) { showToast(e.message || "Failed to vote", "error"); }
+    finally { setIsProcessing(false); }
   };
 
   const handleReact = async (type) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
     try {
       await api.post(`/posts/${post._id}/react`, { type });
       refreshPosts();
-    } catch(e) { alert(e.message); }
+    } catch(e) { showToast(e.message || "Failed to react", "error"); }
+    finally { setIsProcessing(false); }
   };
 
   const handleReport = async () => {
     const reason = prompt("Please provide a reason for reporting:");
     if(!reason) return;
+    setIsProcessing(true);
     try {
         await api.post(`/posts/${post._id}/report`, { reason, reporter: currentUser.username });
-        alert("Post added to the Report Queue and placed Under Review."); 
+        showToast("Post added to the Report Queue and placed Under Review.", "success"); 
         refreshPosts();
-    } catch(err) { alert(err.message); }
+    } catch(err) { showToast(err.message || "Report failed", "error"); }
+    finally { setIsProcessing(false); }
   };
 
   const handleAdminStatus = async (action) => {
+    if (isProcessing) return;
+    if (action === 'remove' && !window.confirm("Are you sure you want to remove this post?")) return;
+    setIsProcessing(true);
     try {
         await api.patch(`/admin/post/${post._id}`, { action });
+        showToast(`Post successfully marked as ${action}`, "success");
         refreshPosts();
-    } catch(err) { alert(err.message); }
+    } catch(err) { showToast(err.message || "Admin action failed", "error"); }
+    finally { setIsProcessing(false); }
+  };
+
+  const handlePostClick = async () => {
+    try {
+        await api.delete(`/notifications/post/${post._id}`);
+    } catch (err) {
+        console.error("Failed to clear post notifications", err);
+    }
   };
 
   const handleCommentSubmit = async () => {
-    if(!newComment.trim()) return;
+    if(!newComment.trim() || isProcessing) return;
+    setIsProcessing(true);
     try {
       await api.post(`/posts/${post._id}/comment`, { content: newComment });
       setNewComment('');
+      showToast("Comment posted!", "success");
       refreshPosts();
-    } catch (err) { alert(err.message); }
+    } catch (err) { showToast(err.message || "Comment failed", "error"); }
+    finally { setIsProcessing(false); }
   };
 
   let statusLabel = null;
   let borderLeftStyle = '';
   if (post.status === 'spam') {
-        statusLabel = <span className="badge badge-danger">⚠️ Spam</span>;
+        const canAdminRemove = currentUser?.role === 'admin';
+        statusLabel = (
+          <span 
+            className={`badge badge-danger ${canAdminRemove ? 'clickable-badge' : ''}`} 
+            style={canAdminRemove ? { cursor: 'pointer', border: '1px solid white' } : {}}
+            title={canAdminRemove ? "Click to Remove this Spam Post" : ""}
+            onClick={() => canAdminRemove && handleAdminStatus('remove')}
+          >
+            ⚠️ Spam {canAdminRemove && <i className="fa-solid fa-trash-can" style={{marginLeft: '4px'}}></i>}
+          </span>
+        );
         borderLeftStyle = "4px solid var(--danger)";
   } else if (post.status === 'duplicate') {
-        statusLabel = <span className="badge badge-danger">📋 Duplicate</span>;
+        statusLabel = (
+            <span className="badge badge-danger">
+                📋 Duplicate {currentUser?.role === 'admin' && post.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {post.similarTo.slice(-6)}</small>}
+            </span>
+        );
   } else if (post.status === 'similar') {
-        statusLabel = <span className="badge badge-warning">📋 Similar</span>;
+        statusLabel = (
+            <span className="badge badge-warning">
+                📋 Similar {currentUser?.role === 'admin' && post.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {post.similarTo.slice(-6)}</small>}
+            </span>
+        );
   } else if (post.status === 'under review') {
         statusLabel = <span className="badge badge-warning">🚩 Under Review</span>;
         borderLeftStyle = "4px solid var(--warning)";
@@ -159,13 +206,10 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
         statusLabel = <span className="badge badge-danger">❌ Removed</span>;
   }
 
-  const fireReactions = post.reactions?.fire || 0;
-  const laughReactions = post.reactions?.laugh || 0;
   const dislikeCount = post.dislikes || 0;
-  const hasReacted = currentUser && post.reactedUsers?.includes(currentUser.username);
 
   return (
-    <div className={`card post-card ${post.isPinned ? 'pinned-post' : ''}`} style={borderLeftStyle ? { borderLeft: borderLeftStyle } : {}}>
+    <div className={`card post-card ${post.isPinned ? 'pinned-post' : ''} post-card-animate`} style={borderLeftStyle ? { borderLeft: borderLeftStyle } : {}} onClick={handlePostClick}>
       <div className="post-votes">
           <button className="vote-btn upvote" onClick={() => handleVote('up')}><i className="fa-solid fa-arrow-up"></i></button>
           <span>{post.likes - dislikeCount}</span>
@@ -212,7 +256,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
             </div>
           )}
 
-          {post.image && <img src={post.image} alt="Post attachment" className="post-attached-image" />}
+          {post.image && <img src={post.image} alt="Post attachment" className="post-attached-image" loading="lazy" />}
 
           <div className="post-actions">
               <button className="action-btn summarize-btn" onClick={() => setSummaryMode(summaryMode ? null : 'short')}>
@@ -234,24 +278,52 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                 )
               )}
 
-              {currentUser?.role === 'admin' && post.status === 'under review' && (
+              {currentUser?.role === 'admin' && (['under review', 'duplicate', 'similar', 'spam'].includes(post.status)) && (
                 <>
-                  <button className="action-btn admin-approve-btn" onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
-                    <i className="fa-solid fa-check"></i> Approve
+                  <button className="action-btn admin-approve-btn" disabled={isProcessing} onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
+                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {isProcessing ? 'Wait...' : (post.status === 'spam' ? 'Not Spam' : 'Approve')}
                   </button>
-                  <button className="action-btn admin-reject-btn" onClick={() => handleAdminStatus('spam')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
-                    <i className="fa-solid fa-xmark"></i> Reject
+                  <button className="action-btn admin-reject-btn" disabled={isProcessing} onClick={() => handleAdminStatus(post.status === 'spam' ? 'remove' : 'spam')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
+                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : post.status === 'spam' ? 'fa-trash-can' : 'fa-xmark'}`}></i> {isProcessing ? 'Wait...' : (post.status === 'spam' ? 'Remove Post' : 'Reject')}
                   </button>
                 </>
               )}
 
-              <div className="emoji-reactions">
-                  <button className="emoji-btn fire-react" disabled={hasReacted} style={hasReacted ? {opacity: 0.5, cursor:'not-allowed'} : {}} onClick={() => handleReact('fire')}>
-                    🔥 {fireReactions}
-                  </button>
-                  <button className="emoji-btn laugh-react" disabled={hasReacted} style={hasReacted ? {opacity: 0.5, cursor:'not-allowed'} : {}} onClick={() => handleReact('laugh')}>
-                    😂 {laughReactions}
-                  </button>
+              <div className="emoji-reactions" style={{ display: 'flex', gap: '0.4rem' }}>
+                {[
+                  { type: 'fire', emoji: '🔥' },
+                  { type: 'laugh', emoji: '😂' },
+                  { type: 'heart', emoji: '❤️' },
+                  { type: 'sad', emoji: '😢' }
+                ].map(({ type, emoji }) => {
+                    const count = post.reactions?.[type] || 0;
+                    const userReaction = post.reactionDetails?.find(r => r.username === currentUser?.username);
+                    const isActive = userReaction?.type === type;
+                    
+                    return (
+                        <button 
+                          key={type}
+                          className={`emoji-btn ${type}-react ${isActive ? 'active' : ''}`} 
+                          onClick={() => handleReact(type)}
+                          style={{
+                              padding: '0.3rem 0.6rem',
+                              borderRadius: '20px',
+                              border: isActive ? '1.5px solid var(--primary-color)' : '1px solid transparent',
+                              background: isActive ? 'rgba(255, 69, 0, 0.1)' : 'var(--bg-light)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.9rem',
+                              color: 'var(--text-dark)'
+                          }}
+                        >
+                          <span style={{ fontSize: isActive ? '1.1rem' : '1rem' }}>{emoji}</span> 
+                          <span style={{ fontWeight: isActive ? 700 : 400 }}>{count}</span>
+                        </button>
+                    );
+                })}
               </div>
           </div>
 
@@ -268,7 +340,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                   />
                   <button className="btn btn-primary submit-comment-btn" onClick={handleCommentSubmit}>Reply</button>
               </div>
-              {renderComments(post.comments, 1, post._id, currentUser, refreshPosts)}
+              {renderComments(post.comments, 1, post._id, currentUser, refreshPosts, showToast)}
             </div>
           )}
       </div>
