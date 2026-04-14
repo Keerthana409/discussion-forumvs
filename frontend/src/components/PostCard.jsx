@@ -250,9 +250,9 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                <div style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase' }}>Summary Length:</span>
                   <div className="summary-options">
-                      <button className="summary-opt-btn" style={summaryMode === 'short' ? { background:'var(--primary-color)' } : {}} onClick={() => setSummaryMode('short')}>Short</button>
-                      <button className="summary-opt-btn" style={summaryMode === 'medium' ? { background:'var(--primary-color)' } : {}} onClick={() => setSummaryMode('medium')}>Medium</button>
-                      <button className="summary-opt-btn" style={summaryMode === 'detailed' ? { background:'var(--primary-color)' } : {}} onClick={() => setSummaryMode('detailed')}>Detailed</button>
+                      <button className="summary-opt-btn" style={summaryMode === 'short' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => setSummaryMode('short')}>Short</button>
+                      <button className="summary-opt-btn" style={summaryMode === 'medium' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => setSummaryMode('medium')}>Medium</button>
+                      <button className="summary-opt-btn" style={summaryMode === 'detailed' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => setSummaryMode('detailed')}>Detailed</button>
                   </div>
               </div>
               <div className="summary-output">
