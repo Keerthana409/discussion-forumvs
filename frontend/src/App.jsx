@@ -4,6 +4,11 @@ import Login from './pages/Login';
 import Forum from './pages/Forum';
 import { ToastProvider } from './context/ToastContext';
 
+const PrivateRoute = ({ children }) => {
+  const token = localStorage.getItem('nexus_token');
+  return token ? children : <Navigate to="/" />;
+};
+
 function App() {
   const [theme, setTheme] = useState(localStorage.getItem('nexus_theme') || 'light');
 
@@ -21,10 +26,6 @@ function App() {
     localStorage.setItem('nexus_theme', newTheme);
   };
 
-  const PrivateRoute = ({ children }) => {
-    const token = localStorage.getItem('nexus_token');
-    return token ? children : <Navigate to="/" />;
-  };
 
   return (
     <ToastProvider>

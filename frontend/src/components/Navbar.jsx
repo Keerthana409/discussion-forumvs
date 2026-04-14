@@ -3,16 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 
-const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }) => {
+const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
   const [notifs, setNotifs] = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const navigate = useNavigate();
   const panelRef = useRef(null);
   const { showToast } = useToast();
 
+  const fetchNotifs = async () => {
+    try {
+      const data = await api.get('/notifications');
+      setNotifs(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     if (currentUser) {
-      fetchNotifs();
+      const init = async () => {
+        await fetchNotifs();
+      };
+      init();
       const interval = setInterval(fetchNotifs, 20000);
       return () => clearInterval(interval);
     }
@@ -27,15 +39,6 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const fetchNotifs = async () => {
-    try {
-      const data = await api.get('/notifications');
-      setNotifs(data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const handleNotifToggle = async () => {
     const isOpening = !showNotifPanel;
@@ -56,17 +59,23 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }
 
   const handleAdminAction = async (postId, action, notificationId) => {
     try {
-      await api.patch(`/admin/post/${postId}`, { action });
+      if (action === 'remove') {
+          // Permanent delete as requested
+          await api.delete(`/admin/post/${postId}`);
+          showToast(`Post has been permanently deleted.`, 'success');
+      } else {
+          await api.patch(`/admin/post/${postId}`, { action });
+          showToast(`Post has been successfully marked as ${action}.`, 'success');
+      }
       
       // Delete the notification after successful action
       if (notificationId) {
         await api.delete(`/notifications/${notificationId}`);
       }
       
-      showToast(`Post has been successfully marked as ${action}.`, 'success');
       setShowNotifPanel(false);
       fetchNotifs();
-      refreshPosts();
+      // Notice: Removed refreshPosts() to prevent resetting to Page 1.
     } catch (err) {
       showToast("Failed action: " + err.message, 'error');
     }
@@ -120,9 +129,9 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }
                 {notifs.length === 0 ? (
                   <li style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center' }}>No notifications yet.</li>
                 ) : (
-                  notifs.map(n => (
+                  notifs.map((n, index) => (
                     <li 
-                      key={n._id || Math.random()} 
+                      key={n._id || `notif-${index}`} 
                       className={`notif-item ${!n.isRead ? 'unread' : ''}`}
                       onClick={() => handleNotifClick(n._id)}
                       style={{ cursor: 'pointer' }}
@@ -131,11 +140,11 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal, refreshPosts }
                       <div className="notif-meta">{new Date(n.timestamp).toLocaleString()}</div>
                       {(n.type === 'admin_spam_alert' || n.type === 'admin_report_alert') && currentUser?.role === 'admin' && (
                         <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-sm btn-success" onClick={() => handleAdminAction(n.postId, 'safe', n._id)} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+                          <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); handleAdminAction(n.postId, 'safe', n._id); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
                             <i className="fa-solid fa-check"></i> {n.type === 'admin_spam_alert' ? 'Not Spam' : 'Approve'}
                           </button>
-                          <button className="btn btn-sm btn-danger" onClick={() => handleAdminAction(n.postId, 'remove', n._id)} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
-                            <i className={`fa-solid ${n.type === 'admin_spam_alert' ? 'fa-trash-can' : 'fa-xmark'}`}></i> {n.type === 'admin_spam_alert' ? 'Remove Post' : 'Reject'}
+                          <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); handleAdminAction(n.postId, 'remove', n._id); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+                            <i className="fa-solid fa-trash-can"></i> Delete Post
                           </button>
                         </div>
                       )}

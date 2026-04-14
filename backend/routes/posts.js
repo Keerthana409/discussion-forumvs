@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const Post = require('../models/Post');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const mongoose = require('mongoose');
 
 const calculateSpamScore = (text) => {
     let score = 0;
@@ -11,7 +12,10 @@ const calculateSpamScore = (text) => {
     const keywords = [
         'buy', 'buy 1 get 1 free', 'buy now', 'free', 'click here', 
         'earn money', 'discount', 'offer', 'prize', 'winner', 
-        'urgent', 'guaranteed', 'cash bonus', 'act now'
+        'urgent', 'guaranteed', 'cash bonus', 'act now',
+        'make money fast', 'low price', 'best price', 'cryptocurrency',
+        'lottery', 'investment opportunity', 'wealth', 'profit',
+        'subscribe', 'follow me', 'check out my bio'
     ];
     keywords.forEach(word => {
         // use regex to match whole words for short words like 'buy' or 'free' to reduce false positives
@@ -125,38 +129,65 @@ router.post('/', auth, async (req, res) => {
 router.post('/:id/vote', auth, async (req, res) => {
     try {
         const type = req.body.type;
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ msg: 'Invalid Post ID' });
         let post = await Post.findById(req.params.id);
         if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-        if (post.upvoters.includes(req.user.username) || post.downvoters.includes(req.user.username)) {
-            return res.status(400).json({ msg: 'Already voted' });
-        }
+        if (!post.upvoters) post.upvoters = [];
+        if (!post.downvoters) post.downvoters = [];
 
-        let user = await User.findById(req.user.id);
-        if(!user) user = { reputation: 0 }; 
-
-        let rep = parseInt(user.reputation || 0);
-        let weight = Math.max(1, Math.floor(Math.log(rep + 1)));
-
-        if (type === 'up') {
-            post.likes += weight;
-            post.upvoters.push(req.user.username);
-            
-            if(post.author !== 'Administrator') {
-                await User.findOneAndUpdate({ username: post.author }, { $inc: { reputation: 1 } });
-            }
-            if (req.user.username !== post.author) {
-                await new Notification({ recipient: post.author, sender: req.user.username, type: 'upvote', context: `upvoted your post: "${post.title}"` }).save();
+        const username = req.user.username;
+        let weight = 1;
+        if (req.user.role !== 'admin' && req.user.id !== 'admin_id') {
+            let user = await User.findById(req.user.id);
+            if(user) {
+                let rep = parseInt(user.reputation || 0);
+                weight = Math.max(1, Math.floor(Math.log(rep + 1)));
             }
         } else {
-            post.dislikes += weight;
-            post.downvoters.push(req.user.username);
+            weight = 5; // Admins have more voting power visually
+        }
+
+        const hasUpvoted = post.upvoters.includes(username);
+        const hasDownvoted = post.downvoters.includes(username);
+
+        if (type === 'up') {
+            if (hasUpvoted) {
+                post.upvoters = post.upvoters.filter(u => u !== username);
+                post.likes = Math.max(0, post.likes - weight);
+            } else {
+                post.upvoters.push(username);
+                post.likes += weight;
+                if (hasDownvoted) {
+                    post.downvoters = post.downvoters.filter(u => u !== username);
+                    post.dislikes = Math.max(0, post.dislikes - weight);
+                }
+                if(post.author !== 'Administrator') {
+                    await User.findOneAndUpdate({ username: post.author }, { $inc: { reputation: 1 } });
+                }
+                if (username !== post.author) {
+                    await new Notification({ recipient: post.author, sender: username, type: 'upvote', context: `upvoted your post: "${post.title}"` }).save();
+                }
+            }
+        } else {
+            if (hasDownvoted) {
+                post.downvoters = post.downvoters.filter(u => u !== username);
+                post.dislikes = Math.max(0, post.dislikes - weight);
+            } else {
+                post.downvoters.push(username);
+                post.dislikes += weight;
+                if (hasUpvoted) {
+                    post.upvoters = post.upvoters.filter(u => u !== username);
+                    post.likes = Math.max(0, post.likes - weight);
+                }
+            }
         }
 
         await post.save();
         res.json(post);
     } catch (err) {
-        res.status(500).send('Server Error');
+        console.error("Vote Error:", err);
+        res.status(500).json({ msg: 'Server Error', error: String(err) });
     }
 });
 
@@ -236,6 +267,7 @@ router.post('/:id/react', auth, async (req, res) => {
 router.post('/:id/comment', auth, async (req, res) => {
     try {
         const { content, targetCommentId } = req.body;
+        if (!content || content.trim() === "") return res.status(400).json({ msg: 'Content is required' });
         let post = await Post.findById(req.params.id);
         if (!post) return res.status(404).json({ msg: 'Post not found' });
 
@@ -281,7 +313,7 @@ router.delete('/:id/comment/:commentId', auth, async (req, res) => {
 
         const deleteComment = (commentsArr, targetId) => {
             for (let i = 0; i < commentsArr.length; i++) {
-                if (commentsArr[i].id === targetId) {
+                if (commentsArr[i].id.toString() === targetId.toString()) {
                     commentsArr.splice(i, 1);
                     return true;
                 }

@@ -28,6 +28,24 @@ router.put('/read', auth, async (req, res) => {
     }
 });
 
+// Delete a single notification
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        const notification = await Notification.findById(req.params.id);
+        if (!notification) return res.status(404).json({ msg: 'Notification not found' });
+        
+        // Ensure user is the recipient or an administrator
+        if (notification.recipient !== req.user.username && req.user.role !== 'admin' && notification.recipient !== 'Administrator') {
+            return res.status(403).json({ msg: 'Unauthorized' });
+        }
+
+        await Notification.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Notification removed' });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
 // Delete all notifications for a specific post
 router.delete('/post/:postId', auth, async (req, res) => {
     try {

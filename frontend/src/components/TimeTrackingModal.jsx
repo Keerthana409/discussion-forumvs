@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import api from '../services/api';
@@ -7,15 +7,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const TimeTrackingModal = ({ isOpen, onClose, theme }) => {
   const [usageData, setUsageData] = useState([]);
-  const hasFetched = useRef(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchUsage();
-    } else {
-      hasFetched.current = false;
-    }
-  }, [isOpen]);
+  const [hasFetched, setHasFetched] = useState(false);
 
   const fetchUsage = async () => {
     try {
@@ -34,11 +26,24 @@ const TimeTrackingModal = ({ isOpen, onClose, theme }) => {
         }
       }
       setUsageData(data);
-      hasFetched.current = true;
+      setHasFetched(true);
     } catch (e) {
       console.error('Failed fetching usage stats', e);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      const init = async () => {
+        await fetchUsage();
+      };
+      init();
+    }
+    
+    return () => {
+      setHasFetched(false);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -113,7 +118,7 @@ const TimeTrackingModal = ({ isOpen, onClose, theme }) => {
           <div style={{ background: 'var(--bg-light)', padding: '1rem', borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', alignItems: 'center', border: '1px solid var(--border-color)' }}>
             <h3 style={{ marginBottom: '1rem', color: 'var(--text-dark)' }}>Recent Activity (Minutes per Day)</h3>
             <div style={{ width: '100%' }}>
-              {hasFetched.current && <Bar data={chartData} options={chartOptions} />}
+              {hasFetched && <Bar data={chartData} options={chartOptions} />}
             </div>
           </div>
         </div>

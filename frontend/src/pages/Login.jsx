@@ -17,6 +17,18 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (activeTab === 'signup') {
+      if (formData.name.trim().length < 4) {
+        setError('Name must contain at least 4 letters.');
+        return;
+      }
+      if (!/(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+        setError('Password must contain at least 1 capital letter and 1 number.');
+        return;
+      }
+    }
+
     setIsLoading(true);
 
     try {
@@ -94,6 +106,7 @@ const Login = () => {
                 value={formData.name}
                 onChange={handleInputChange}
                 required 
+                minLength={4}
               />
             </div>
           )}

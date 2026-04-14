@@ -106,7 +106,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [summaryMode, setSummaryMode] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [actionProcessing, setActionProcessing] = useState(null);
   const { showToast } = useToast();
 
   React.useEffect(() => {
@@ -114,47 +114,53 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   }, [post]);
 
   const handleVote = async (type) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
+    if (actionProcessing) return;
+    setActionProcessing('vote');
     try {
       const updatedPost = await api.post(`/posts/${localPost._id}/vote`, { type });
       setLocalPost(updatedPost);
     } catch(e) { showToast(e.message || "Failed to vote", "error"); }
-    finally { setIsProcessing(false); }
+    finally { setActionProcessing(null); }
   };
 
   const handleReact = async (type) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
+    if (actionProcessing) return;
+    setActionProcessing('react');
     try {
       const updatedPost = await api.post(`/posts/${localPost._id}/react`, { type });
       setLocalPost(updatedPost);
     } catch(e) { showToast(e.message || "Failed to react", "error"); }
-    finally { setIsProcessing(false); }
+    finally { setActionProcessing(null); }
   };
 
   const handleReport = async () => {
     const reason = prompt("Please provide a reason for reporting:");
     if(!reason) return;
-    setIsProcessing(true);
+    setActionProcessing('report');
     try {
         await api.post(`/posts/${localPost._id}/report`, { reason, reporter: currentUser.username });
         showToast("Post added to the Report Queue and placed Under Review.", "success"); 
         refreshPosts(); // Here we still refresh because the post status changes and might be filtered out
     } catch(err) { showToast(err.message || "Report failed", "error"); }
-    finally { setIsProcessing(false); }
+    finally { setActionProcessing(null); }
   };
 
   const handleAdminStatus = async (action) => {
-    if (isProcessing) return;
-    if (action === 'remove' && !window.confirm("Are you sure you want to remove this post?")) return;
-    setIsProcessing(true);
+    if (actionProcessing) return;
+    if (action === 'remove' && !window.confirm("Are you sure you want to PERMANENTLY delete this post?")) return;
+    setActionProcessing('admin');
     try {
-        await api.patch(`/admin/post/${localPost._id}`, { action });
-        showToast(`Post successfully marked as ${action}`, "success");
-        refreshPosts(); // Admin actions should refresh feed
+        if (action === 'remove') {
+            await api.delete(`/admin/post/${localPost._id}`);
+            showToast("Post permanently deleted", "success");
+            setLocalPost({ ...localPost, isDeletedLocally: true });
+        } else {
+            const updated = await api.patch(`/admin/post/${localPost._id}`, { action });
+            showToast(`Post successfully marked as ${action}`, "success");
+            setLocalPost(updated);
+        }
     } catch(err) { showToast(err.message || "Admin action failed", "error"); }
-    finally { setIsProcessing(false); }
+    finally { setActionProcessing(null); }
   };
 
   const handlePostClick = async () => {
@@ -166,15 +172,15 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   };
 
   const handleCommentSubmit = async () => {
-    if(!newComment.trim() || isProcessing) return;
-    setIsProcessing(true);
+    if(!newComment.trim() || actionProcessing === 'comment') return;
+    setActionProcessing('comment');
     try {
       const updatedPost = await api.post(`/posts/${localPost._id}/comment`, { content: newComment });
       setNewComment('');
       showToast("Comment posted!", "success");
       setLocalPost(updatedPost);
     } catch (err) { showToast(err.message || "Comment failed", "error"); }
-    finally { setIsProcessing(false); }
+    finally { setActionProcessing(null); }
   };
 
   let statusLabel = null;
@@ -186,7 +192,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
             className={`badge badge-danger ${canAdminRemove ? 'clickable-badge' : ''}`} 
             style={canAdminRemove ? { cursor: 'pointer', border: '1px solid white' } : {}}
             title={canAdminRemove ? "Click to Remove this Spam Post" : ""}
-            onClick={() => canAdminRemove && handleAdminStatus('remove')}
+            onClick={(e) => { e.stopPropagation(); canAdminRemove && handleAdminStatus('remove'); }}
           >
             ⚠️ Spam {canAdminRemove && <i className="fa-solid fa-trash-can" style={{marginLeft: '4px'}}></i>}
           </span>
@@ -212,10 +218,12 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   }
 
   const dislikeCount = localPost.dislikes || 0;
+  
+  if (localPost.isDeletedLocally) return null;
 
   return (
     <div className={`card post-card ${localPost.isPinned ? 'pinned-post' : ''} post-card-animate`} style={borderLeftStyle ? { borderLeft: borderLeftStyle } : {}} onClick={handlePostClick}>
-      <div className="post-votes">
+      <div className="post-votes" onClick={e => e.stopPropagation()}>
           <button className="vote-btn upvote" onClick={() => handleVote('up')}><i className="fa-solid fa-arrow-up"></i></button>
           <span>{localPost.likes - dislikeCount}</span>
           <button className="vote-btn down downvote" onClick={() => handleVote('down')}><i className="fa-solid fa-arrow-down"></i></button>
@@ -263,7 +271,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
 
           {localPost.image && <img src={localPost.image} alt="Post attachment" className="post-attached-image" loading="lazy" />}
 
-          <div className="post-actions">
+          <div className="post-actions" onClick={e => e.stopPropagation()}>
               <button className="action-btn summarize-btn" onClick={() => setSummaryMode(summaryMode ? null : 'short')}>
                 <i className="fa-solid fa-bolt"></i> Summarize
               </button>
@@ -283,14 +291,29 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                 )
               )}
 
-              {currentUser?.role === 'admin' && (['under review', 'duplicate', 'similar', 'spam'].includes(localPost.status)) && (
+              {currentUser?.role === 'admin' && (
                 <>
-                  <button className="action-btn admin-approve-btn" disabled={isProcessing} onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
-                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {isProcessing ? 'Wait...' : (localPost.status === 'spam' ? 'Not Spam' : 'Approve')}
-                  </button>
-                  <button className="action-btn admin-reject-btn" disabled={isProcessing} onClick={() => handleAdminStatus(localPost.status === 'spam' ? 'remove' : 'spam')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
-                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : localPost.status === 'spam' ? 'fa-trash-can' : 'fa-xmark'}`}></i> {isProcessing ? 'Wait...' : (localPost.status === 'spam' ? 'Remove Post' : 'Reject')}
-                  </button>
+                  {(['under review', 'duplicate', 'similar', 'spam'].includes(localPost.status)) ? (
+                    <>
+                      <button className="action-btn admin-approve-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
+                        <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {actionProcessing === 'admin' ? 'Wait...' : 'Approve'}
+                      </button>
+                      <button className="action-btn admin-reject-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('remove')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
+                        <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : 'fa-trash-can'}`}></i> {actionProcessing === 'admin' ? 'Wait...' : (localPost.status === 'spam' ? 'Delete Post' : 'Reject')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {localPost.status !== 'spam' && (
+                        <button className="action-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('spam')} style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                          <i className="fa-solid fa-triangle-exclamation"></i> Mark Spam
+                        </button>
+                      )}
+                      <button className="action-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('remove')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+                        <i className="fa-solid fa-trash-can"></i> Delete
+                      </button>
+                    </>
+                  )}
                 </>
               )}
 

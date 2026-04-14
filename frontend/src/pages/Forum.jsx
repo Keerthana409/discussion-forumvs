@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 import CreatePost from '../components/CreatePost';
 import PostCard from '../components/PostCard';
@@ -16,10 +16,9 @@ const Forum = ({ theme, toggleTheme }) => {
   const [isTimeModalOpen, setTimeModalOpen] = useState(false);
   const [usageWarning, setUsageWarning] = useState(false);
   
-  // Pagination State
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const observer = useRef();
+  const [totalPosts, setTotalPosts] = useState(0);
 
   const currentUser = JSON.parse(localStorage.getItem('nexus_user') || 'null');
 
@@ -31,7 +30,7 @@ const Forum = ({ theme, toggleTheme }) => {
     }
 
     try {
-      const response = await api.get(`/posts?page=${pageNum}&limit=8`);
+      const response = await api.get(`/posts?page=${pageNum}&limit=10`);
       
       // Robust Handling: Check if response is the new object format or the old array format
       let newPosts = [];
@@ -43,9 +42,10 @@ const Forum = ({ theme, toggleTheme }) => {
       } else if (response && response.posts) {
           newPosts = response.posts;
           moreAvailable = response.hasMore;
+          if (response.total !== undefined) setTotalPosts(response.total);
       }
       
-      setPosts(prev => pageNum === 1 ? newPosts : [...prev, ...newPosts]);
+      setPosts(newPosts);
       setHasMore(moreAvailable);
       setPage(pageNum);
     } catch (err) {
@@ -67,7 +67,7 @@ const Forum = ({ theme, toggleTheme }) => {
     const usageInterval = setInterval(async () => {
       sessionMinutes++;
       localStorage.setItem('df_sessionMinutes', sessionMinutes);
-      if (sessionMinutes > 0 && sessionMinutes % 30 === 0) setUsageWarning(true);
+      if (sessionMinutes > 0 && sessionMinutes % 15 === 0) setUsageWarning(true);
       try {
         await api.post('/usage');
       } catch (e) {
@@ -78,17 +78,7 @@ const Forum = ({ theme, toggleTheme }) => {
     return () => clearInterval(usageInterval);
   }, [fetchPosts]);
 
-  // Infinite Scroll Observer
-  const lastPostRef = useCallback(node => {
-    if (isLoading || isFetchingMore) return;
-    if (observer.current) observer.current.disconnect();
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
-        fetchPosts(page + 1);
-      }
-    });
-    if (node) observer.current.observe(node);
-  }, [isLoading, isFetchingMore, hasMore, page, fetchPosts]);
+  // Removed Infinite Scroll Observer to enforce strict manual pagination
 
   const resetAndFetch = () => {
       setPage(1);
@@ -187,20 +177,7 @@ const Forum = ({ theme, toggleTheme }) => {
                 </>
             ) : filteredPosts.length > 0 ? (
                 <>
-                    {filteredPosts.map((post, index) => {
-                        if (filteredPosts.length === index + 1) {
-                            return (
-                                <div ref={lastPostRef} key={post._id}>
-                                    <PostCard 
-                                        post={post} 
-                                        currentUser={currentUser} 
-                                        refreshPosts={resetAndFetch}
-                                        setTagFilter={setTagFilter}
-                                        searchQuery={searchQuery}
-                                    />
-                                </div>
-                            );
-                        } else {
+                    {filteredPosts.map((post) => {
                             return (
                                 <PostCard 
                                     key={post._id} 
@@ -211,8 +188,35 @@ const Forum = ({ theme, toggleTheme }) => {
                                     searchQuery={searchQuery}
                                 />
                             );
-                        }
                     })}
+                    
+                    {/* Professional Pagination Bar */}
+                    <div className="pagination-wrapper" style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem', padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                        <div className="pagination-nav" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg-card)', padding: '0.4rem', borderRadius: '50px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)' }}>
+                            <button 
+                                className="pag-btn" 
+                                disabled={page === 1 || isFetchingMore}
+                                onClick={() => fetchPosts(page - 1, true)}
+                                title="Previous Page"
+                            >
+                                <i className="fa-solid fa-chevron-left"></i>
+                            </button>
+                            
+                            <div className="pag-info" style={{ padding: '0 1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-dark)', borderLeft: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)', margin: '0 0.5rem' }}>
+                                Page {page} <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: '0.25rem' }}>of {Math.ceil(totalPosts / 10) || 1}</span>
+                            </div>
+
+                            <button 
+                                className="pag-btn" 
+                                disabled={!hasMore || isFetchingMore}
+                                onClick={() => fetchPosts(page + 1, true)}
+                                title="Next Page"
+                            >
+                                <i className="fa-solid fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
                     {isFetchingMore && (
                         <div style={{ padding: '1rem', textAlign: 'center' }}>
                             <SkeletonCard />
@@ -239,16 +243,26 @@ const Forum = ({ theme, toggleTheme }) => {
         theme={theme}
       />
 
-      {usageWarning && (
-        <div className="usage-warning-overlay">
-            <div className="usage-warning-popup">
-                <h2 style={{ color: 'var(--warning)', marginBottom: '1rem' }}><i className="fa-solid fa-triangle-exclamation"></i> Time Warning</h2>
-                <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-dark)' }}>⚠️ You've spent more than 30 minutes on the forum.</p>
-                <p style={{ color: 'var(--text-muted)' }}>Please take a break!</p>
-                <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={() => setUsageWarning(false)}>I Understand</button>
-            </div>
-        </div>
-      )}
+      {usageWarning && (() => {
+        const smins = parseInt(localStorage.getItem('df_sessionMinutes')) || 0;
+        const hh = Math.floor(smins / 60).toString().padStart(2, '0');
+        const mm = (smins % 60).toString().padStart(2, '0');
+        return (
+          <div className="usage-warning-overlay">
+              <div className="usage-warning-popup" style={{ border: 'none', boxShadow: 'var(--shadow-md)', padding: '2.5rem' }}>
+                  <div style={{ width: '60px', height: '60px', background: 'rgba(255, 211, 0, 0.1)', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 1.5rem' }}>
+                      <i className="fa-solid fa-clock" style={{ fontSize: '2rem', color: 'var(--warning)' }}></i>
+                  </div>
+                  <h2 style={{ color: 'var(--text-dark)', marginBottom: '1rem', fontSize: '1.5rem' }}>Take a Break?</h2>
+                  <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-dark)' }}>
+                      You've been active for <strong>{parseInt(hh)}h:{mm}min</strong> today.
+                  </p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Small breaks help keep your mind fresh and your attention sharp. Refresh yourself!</p>
+                  <button className="btn btn-primary" style={{ marginTop: '2rem', width: '100%' }} onClick={() => setUsageWarning(false)}>I Understand</button>
+              </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

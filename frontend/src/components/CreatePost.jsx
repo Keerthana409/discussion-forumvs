@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import api from '../services/api';
-
+import { useToast } from '../context/ToastContext';
 const CreatePost = ({ refreshPosts }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [formData, setFormData] = useState({ title: '', tags: '', content: '' });
   const [imagePreview, setImagePreview] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
   const fileInputRef = useRef(null);
 
   const handleExpand = () => setIsExpanded(true);
@@ -33,6 +35,9 @@ const CreatePost = ({ refreshPosts }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     const tagsArray = formData.tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
     
     try {
@@ -47,6 +52,8 @@ const CreatePost = ({ refreshPosts }) => {
       handleCancel();
     } catch (err) {
       showToast("Failed to create post: " + err.message, "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -125,8 +132,10 @@ const CreatePost = ({ refreshPosts }) => {
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-          <button type="button" className="btn btn-secondary" onClick={handleCancel}>Cancel</button>
-          <button type="submit" className="btn btn-primary">Publish Post</button>
+          <button type="button" className="btn btn-secondary" onClick={handleCancel} disabled={isSubmitting}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              {isSubmitting ? 'Publishing...' : 'Publish Post'}
+          </button>
         </div>
       </form>
     </div>
