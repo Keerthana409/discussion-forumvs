@@ -102,18 +102,23 @@ const CommentItem = ({ c, depth, postId, currentUser, refreshPosts, showToast })
 };
 
 const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }) => {
+  const [localPost, setLocalPost] = useState(post);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [summaryMode, setSummaryMode] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { showToast } = useToast();
 
+  React.useEffect(() => {
+    setLocalPost(post);
+  }, [post]);
+
   const handleVote = async (type) => {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      await api.post(`/posts/${post._id}/vote`, { type });
-      refreshPosts();
+      const updatedPost = await api.post(`/posts/${localPost._id}/vote`, { type });
+      setLocalPost(updatedPost);
     } catch(e) { showToast(e.message || "Failed to vote", "error"); }
     finally { setIsProcessing(false); }
   };
@@ -122,8 +127,8 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      await api.post(`/posts/${post._id}/react`, { type });
-      refreshPosts();
+      const updatedPost = await api.post(`/posts/${localPost._id}/react`, { type });
+      setLocalPost(updatedPost);
     } catch(e) { showToast(e.message || "Failed to react", "error"); }
     finally { setIsProcessing(false); }
   };
@@ -133,9 +138,9 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     if(!reason) return;
     setIsProcessing(true);
     try {
-        await api.post(`/posts/${post._id}/report`, { reason, reporter: currentUser.username });
+        await api.post(`/posts/${localPost._id}/report`, { reason, reporter: currentUser.username });
         showToast("Post added to the Report Queue and placed Under Review.", "success"); 
-        refreshPosts();
+        refreshPosts(); // Here we still refresh because the post status changes and might be filtered out
     } catch(err) { showToast(err.message || "Report failed", "error"); }
     finally { setIsProcessing(false); }
   };
@@ -145,16 +150,16 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     if (action === 'remove' && !window.confirm("Are you sure you want to remove this post?")) return;
     setIsProcessing(true);
     try {
-        await api.patch(`/admin/post/${post._id}`, { action });
+        await api.patch(`/admin/post/${localPost._id}`, { action });
         showToast(`Post successfully marked as ${action}`, "success");
-        refreshPosts();
+        refreshPosts(); // Admin actions should refresh feed
     } catch(err) { showToast(err.message || "Admin action failed", "error"); }
     finally { setIsProcessing(false); }
   };
 
   const handlePostClick = async () => {
     try {
-        await api.delete(`/notifications/post/${post._id}`);
+        await api.delete(`/notifications/post/${localPost._id}`);
     } catch (err) {
         console.error("Failed to clear post notifications", err);
     }
@@ -164,17 +169,17 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     if(!newComment.trim() || isProcessing) return;
     setIsProcessing(true);
     try {
-      await api.post(`/posts/${post._id}/comment`, { content: newComment });
+      const updatedPost = await api.post(`/posts/${localPost._id}/comment`, { content: newComment });
       setNewComment('');
       showToast("Comment posted!", "success");
-      refreshPosts();
+      setLocalPost(updatedPost);
     } catch (err) { showToast(err.message || "Comment failed", "error"); }
     finally { setIsProcessing(false); }
   };
 
   let statusLabel = null;
   let borderLeftStyle = '';
-  if (post.status === 'spam') {
+  if (localPost.status === 'spam') {
         const canAdminRemove = currentUser?.role === 'admin';
         statusLabel = (
           <span 
@@ -187,57 +192,57 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
           </span>
         );
         borderLeftStyle = "4px solid var(--danger)";
-  } else if (post.status === 'duplicate') {
+  } else if (localPost.status === 'duplicate') {
         statusLabel = (
             <span className="badge badge-danger">
-                📋 Duplicate {currentUser?.role === 'admin' && post.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {post.similarTo.slice(-6)}</small>}
+                📋 Duplicate {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
             </span>
         );
-  } else if (post.status === 'similar') {
+  } else if (localPost.status === 'similar') {
         statusLabel = (
             <span className="badge badge-warning">
-                📋 Similar {currentUser?.role === 'admin' && post.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {post.similarTo.slice(-6)}</small>}
+                📋 Similar {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
             </span>
         );
-  } else if (post.status === 'under review') {
+  } else if (localPost.status === 'under review') {
         statusLabel = <span className="badge badge-warning">🚩 Under Review</span>;
         borderLeftStyle = "4px solid var(--warning)";
-  } else if (post.status === 'removed') {
+  } else if (localPost.status === 'removed') {
         statusLabel = <span className="badge badge-danger">❌ Removed</span>;
   }
 
-  const dislikeCount = post.dislikes || 0;
+  const dislikeCount = localPost.dislikes || 0;
 
   return (
-    <div className={`card post-card ${post.isPinned ? 'pinned-post' : ''} post-card-animate`} style={borderLeftStyle ? { borderLeft: borderLeftStyle } : {}} onClick={handlePostClick}>
+    <div className={`card post-card ${localPost.isPinned ? 'pinned-post' : ''} post-card-animate`} style={borderLeftStyle ? { borderLeft: borderLeftStyle } : {}} onClick={handlePostClick}>
       <div className="post-votes">
           <button className="vote-btn upvote" onClick={() => handleVote('up')}><i className="fa-solid fa-arrow-up"></i></button>
-          <span>{post.likes - dislikeCount}</span>
+          <span>{localPost.likes - dislikeCount}</span>
           <button className="vote-btn down downvote" onClick={() => handleVote('down')}><i className="fa-solid fa-arrow-down"></i></button>
       </div>
 
       <div className="post-content-area">
           <div className="post-meta">
-              <span>Posted by <strong>u/{post.author}</strong></span>
+              <span>Posted by <strong>u/{localPost.author}</strong></span>
               <span>•</span>
-              <span>{new Date(post.timestamp).toLocaleString()}</span>
+              <span>{new Date(localPost.timestamp).toLocaleString()}</span>
               <div style={{ marginLeft: 'auto' }}>{statusLabel}</div>
           </div>
 
           <h3 className="post-title">
-            {post.isPinned && <i className="fa-solid fa-thumbtack pinned-icon"></i>}
+            {localPost.isPinned && <i className="fa-solid fa-thumbtack pinned-icon"></i>}
             {' '}
-            <HighlightedText text={post.title} highlight={searchQuery} />
+            <HighlightedText text={localPost.title} highlight={searchQuery} />
           </h3>
 
           <div style={{ marginBottom: '0.5em', display: 'flex', gap: '0.3rem' }}>
-            {post.tags?.map((t, i) => (
+            {localPost.tags?.map((t, i) => (
               <span key={i} className="post-tag badge" style={{ color: 'var(--text-dark)' }} onClick={() => setTagFilter(t)}>{t}</span>
             ))}
           </div>
 
           <div className="post-body">
-            <HighlightedText text={post.content} highlight={searchQuery} />
+            <HighlightedText text={localPost.content} highlight={searchQuery} />
           </div>
 
           {summaryMode && (
@@ -251,23 +256,23 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                   </div>
               </div>
               <div className="summary-output">
-                <strong>✨ AI Summary ({summaryMode.charAt(0).toUpperCase() + summaryMode.slice(1)}):</strong> {summarizeText(post.content, summaryMode)}
+                <strong>✨ AI Summary ({summaryMode.charAt(0).toUpperCase() + summaryMode.slice(1)}):</strong> {summarizeText(localPost.content, summaryMode)}
               </div>
             </div>
           )}
 
-          {post.image && <img src={post.image} alt="Post attachment" className="post-attached-image" loading="lazy" />}
+          {localPost.image && <img src={localPost.image} alt="Post attachment" className="post-attached-image" loading="lazy" />}
 
           <div className="post-actions">
               <button className="action-btn summarize-btn" onClick={() => setSummaryMode(summaryMode ? null : 'short')}>
                 <i className="fa-solid fa-bolt"></i> Summarize
               </button>
               <button className="action-btn comment-btn" onClick={() => setShowComments(!showComments)}>
-                <i className="fa-regular fa-comment-dots"></i> {post.comments ? post.comments.length : 0} Comments
+                <i className="fa-regular fa-comment-dots"></i> {localPost.comments ? localPost.comments.length : 0} Comments
               </button>
 
               {currentUser?.role !== 'admin' && (
-                post.hasReport ? (
+                localPost.hasReport ? (
                   <button className="action-btn" disabled style={{ opacity: 0.6, cursor: 'not-allowed', color: 'var(--danger)' }}>
                     <i className="fa-solid fa-flag"></i> Reported
                   </button>
@@ -278,13 +283,13 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                 )
               )}
 
-              {currentUser?.role === 'admin' && (['under review', 'duplicate', 'similar', 'spam'].includes(post.status)) && (
+              {currentUser?.role === 'admin' && (['under review', 'duplicate', 'similar', 'spam'].includes(localPost.status)) && (
                 <>
                   <button className="action-btn admin-approve-btn" disabled={isProcessing} onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
-                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {isProcessing ? 'Wait...' : (post.status === 'spam' ? 'Not Spam' : 'Approve')}
+                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {isProcessing ? 'Wait...' : (localPost.status === 'spam' ? 'Not Spam' : 'Approve')}
                   </button>
-                  <button className="action-btn admin-reject-btn" disabled={isProcessing} onClick={() => handleAdminStatus(post.status === 'spam' ? 'remove' : 'spam')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
-                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : post.status === 'spam' ? 'fa-trash-can' : 'fa-xmark'}`}></i> {isProcessing ? 'Wait...' : (post.status === 'spam' ? 'Remove Post' : 'Reject')}
+                  <button className="action-btn admin-reject-btn" disabled={isProcessing} onClick={() => handleAdminStatus(localPost.status === 'spam' ? 'remove' : 'spam')} style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}>
+                    <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : localPost.status === 'spam' ? 'fa-trash-can' : 'fa-xmark'}`}></i> {isProcessing ? 'Wait...' : (localPost.status === 'spam' ? 'Remove Post' : 'Reject')}
                   </button>
                 </>
               )}
@@ -296,8 +301,8 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                   { type: 'heart', emoji: '❤️' },
                   { type: 'sad', emoji: '😢' }
                 ].map(({ type, emoji }) => {
-                    const count = post.reactions?.[type] || 0;
-                    const userReaction = post.reactionDetails?.find(r => r.username === currentUser?.username);
+                    const count = localPost.reactions?.[type] || 0;
+                    const userReaction = localPost.reactionDetails?.find(r => r.username === currentUser?.username);
                     const isActive = userReaction?.type === type;
                     
                     return (
@@ -340,7 +345,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                   />
                   <button className="btn btn-primary submit-comment-btn" onClick={handleCommentSubmit}>Reply</button>
               </div>
-              {renderComments(post.comments, 1, post._id, currentUser, refreshPosts, showToast)}
+              {renderComments(localPost.comments, 1, localPost._id, currentUser, refreshPosts, showToast)}
             </div>
           )}
       </div>
