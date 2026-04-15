@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import CreatePost from '../components/CreatePost';
 import PostCard from '../components/PostCard';
@@ -19,6 +19,7 @@ const Forum = ({ theme, toggleTheme }) => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalPosts, setTotalPosts] = useState(0);
+  const observer = useRef();
 
   const currentUser = JSON.parse(localStorage.getItem('nexus_user') || 'null');
 
@@ -30,7 +31,11 @@ const Forum = ({ theme, toggleTheme }) => {
     }
 
     try {
-      const response = await api.get(`/posts?page=${pageNum}&limit=10`);
+      let url = `/posts?page=${pageNum}&limit=10`;
+      if (filter === 'mine' && currentUser) {
+          url = `/posts/user/${currentUser.username}?page=${pageNum}&limit=10`;
+      }
+      const response = await api.get(url);
       
       // Robust Handling: Check if response is the new object format or the old array format
       let newPosts = [];
@@ -45,12 +50,16 @@ const Forum = ({ theme, toggleTheme }) => {
           if (response.total !== undefined) setTotalPosts(response.total);
       }
       
-      setPosts(newPosts);
+      if (isInitial) {
+        setPosts(newPosts);
+      } else {
+        setPosts(prev => [...prev, ...newPosts]);
+      }
+      
       setHasMore(moreAvailable);
       setPage(pageNum);
       
-      // Auto-scroll to top when page changes
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Removed manual scroll to top to maintain scroll position during infinite load
     } catch (err) {
       console.error(err);
     } finally {
@@ -79,9 +88,18 @@ const Forum = ({ theme, toggleTheme }) => {
     }, 60000);
 
     return () => clearInterval(usageInterval);
-  }, [fetchPosts]);
+  }, [fetchPosts, filter]); // Added filter as dependency to re-fetch when it changes
 
-  // Removed Infinite Scroll Observer to enforce strict manual pagination
+  const lastPostElementRef = useCallback(node => {
+    if (isLoading || isFetchingMore) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        fetchPosts(page + 1, false);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [isLoading, isFetchingMore, hasMore, page, fetchPosts]);
 
   const resetAndFetch = () => {
       setPage(1);
@@ -113,6 +131,11 @@ const Forum = ({ theme, toggleTheme }) => {
     } else if (filter === 'safe') {
       filtered = filtered.filter(p => p.status === 'safe');
       filtered.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+    } else if (filter === 'mine') {
+      // Backend already filters by user if we fetch specifically, 
+      // but if we are filtering locally (unlikely with pagination), we handle it:
+      filtered = filtered.filter(p => p.author === currentUser?.username);
+      filtered.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
     } else {
       filtered.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
     }
@@ -139,6 +162,9 @@ const Forum = ({ theme, toggleTheme }) => {
             <div className="filter-buttons" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button className={`filter-btn ${filter === 'latest' ? 'active' : ''}`} onClick={() => setFilter('latest')}>Latest Posts</button>
               <button className={`filter-btn ${filter === 'top' ? 'active' : ''}`} onClick={() => setFilter('top')}>Top Discussions</button>
+              {currentUser && (
+                <button className={`filter-btn ${filter === 'mine' ? 'active' : ''}`} onClick={() => setFilter('mine')}>Your Posts</button>
+              )}
               {currentUser?.role === 'admin' && (
                 <>
                   <button className={`filter-btn ${filter === 'flagged' ? 'active' : ''}`} onClick={() => setFilter('flagged')}>Flagged</button>
@@ -180,45 +206,19 @@ const Forum = ({ theme, toggleTheme }) => {
                 </>
             ) : filteredPosts.length > 0 ? (
                 <>
-                    {filteredPosts.map((post) => {
+                    {filteredPosts.map((post, index) => {
                             return (
-                                <PostCard 
-                                    key={post._id} 
-                                    post={post} 
-                                    currentUser={currentUser} 
-                                    refreshPosts={resetAndFetch}
-                                    setTagFilter={setTagFilter}
-                                    searchQuery={searchQuery}
-                                />
+                                <div key={post._id} ref={filteredPosts.length === index + 1 ? lastPostElementRef : null}>
+                                    <PostCard 
+                                        post={post} 
+                                        currentUser={currentUser} 
+                                        refreshPosts={resetAndFetch}
+                                        setTagFilter={setTagFilter}
+                                        searchQuery={searchQuery}
+                                    />
+                                </div>
                             );
                     })}
-                    
-                    {/* Professional Pagination Bar */}
-                    <div className="pagination-wrapper" style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem', padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                        <div className="pagination-nav" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg-card)', padding: '0.4rem', borderRadius: '50px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)' }}>
-                            <button 
-                                className="pag-btn" 
-                                disabled={page === 1 || isFetchingMore}
-                                onClick={() => fetchPosts(page - 1, true)}
-                                title="Previous Page"
-                            >
-                                <i className="fa-solid fa-chevron-left"></i>
-                            </button>
-                            
-                            <div className="pag-info" style={{ padding: '0 1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-dark)', borderLeft: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)', margin: '0 0.5rem' }}>
-                                Page {page} <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: '0.25rem' }}>of {Math.ceil(totalPosts / 10) || 1}</span>
-                            </div>
-
-                            <button 
-                                className="pag-btn" 
-                                disabled={!hasMore || isFetchingMore}
-                                onClick={() => fetchPosts(page + 1, true)}
-                                title="Next Page"
-                            >
-                                <i className="fa-solid fa-chevron-right"></i>
-                            </button>
-                        </div>
-                    </div>
 
                     {isFetchingMore && (
                         <div style={{ padding: '1rem', textAlign: 'center' }}>

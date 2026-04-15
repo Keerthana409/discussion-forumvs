@@ -108,6 +108,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [summaryMode, setSummaryMode] = useState(null);
   const [actionProcessing, setActionProcessing] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmUserDelete, setConfirmUserDelete] = useState(false);
   const { showToast } = useToast();
 
   React.useEffect(() => {
@@ -139,10 +140,15 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     if(!reason) return;
     setActionProcessing('report');
     try {
-        await api.post(`/posts/${localPost._id}/report`, { reason, reporter: currentUser.username });
+        console.log(`Reporting post ${localPost._id} for reason: ${reason}`);
+        const updatedPost = await api.post(`/posts/${localPost._id}/report`, { reason, reporter: currentUser?.username || 'anonymous' });
         showToast("Post added to the Report Queue and placed Under Review.", "success"); 
-        refreshPosts(); // Here we still refresh because the post status changes and might be filtered out
-    } catch(err) { showToast(err.message || "Report failed", "error"); }
+        setLocalPost(updatedPost); // Update local state immediately
+        if (refreshPosts) refreshPosts(); 
+    } catch(err) { 
+        console.error("Report failed:", err);
+        showToast(err.message || "Report failed", "error"); 
+    }
     finally { setActionProcessing(null); }
   };
 
@@ -172,6 +178,33 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     finally { 
         setActionProcessing(null); 
         setConfirmRemove(false);
+    }
+  };
+
+  const getUserDeleteAction = async () => {
+    if (actionProcessing) return;
+    
+    if (!confirmUserDelete) {
+        setConfirmUserDelete(true);
+        // Reset after 3 seconds if not clicked
+        setTimeout(() => setConfirmUserDelete(false), 3000);
+        return;
+    }
+
+    setActionProcessing('delete');
+    try {
+        console.log(`Attempting to delete post: ${localPost._id}`);
+        const res = await api.delete(`/posts/${localPost._id}`);
+        console.log(`Delete response:`, res);
+        showToast("Post deleted successfully", "success");
+        setLocalPost({ ...localPost, isDeletedLocally: true });
+        if (refreshPosts) refreshPosts();
+    } catch (err) {
+        console.error("Delete failed:", err);
+        showToast(err.message || "Failed to delete post", "error");
+    } finally {
+        setActionProcessing(null);
+        setConfirmUserDelete(false);
     }
   };
 
@@ -206,7 +239,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
         borderLeftStyle = "4px solid var(--danger)";
   } else if (localPost.status === 'duplicate') {
         statusLabel = (
-            <span className="badge badge-danger">
+            <span className="badge badge-warning">
                 📋 Duplicate {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
             </span>
         );
@@ -284,6 +317,18 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
               <button className="action-btn comment-btn" onClick={() => setShowComments(!showComments)}>
                 <i className="fa-regular fa-comment-dots"></i> {localPost.comments ? localPost.comments.length : 0} Comments
               </button>
+
+              {currentUser && localPost.author === currentUser.username && (
+                <button 
+                  className={`action-btn delete-btn ${confirmUserDelete ? 'confirming' : ''}`} 
+                  onClick={getUserDeleteAction} 
+                  style={{ color: confirmUserDelete ? 'white' : 'var(--danger)', backgroundColor: confirmUserDelete ? 'var(--danger)' : 'var(--secondary-color)', fontWeight: confirmUserDelete ? 'bold' : '600' }}
+                >
+                    <i className={`fa-solid ${actionProcessing === 'delete' ? 'fa-spinner fa-spin' : (confirmUserDelete ? 'fa-triangle-exclamation' : 'fa-trash-can')}`}></i> 
+                    {' '}
+                    {actionProcessing === 'delete' ? 'Deleting...' : (confirmUserDelete ? 'Confirm Delete?' : 'Delete')}
+                </button>
+              )}
 
               {currentUser?.role !== 'admin' && (
                 localPost.hasReport ? (

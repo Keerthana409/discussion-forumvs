@@ -46,6 +46,35 @@ const calculateSimilarity = (newText, oldText) => {
 
 const checkBadWords = (text) => /hate|kill|scam|abuse|fraud|jerk|loser/i.test(text);
 
+// Delete a post by the author (Moved to top to prevent route shadowing)
+router.delete('/:id', auth, async (req, res) => {
+    console.log(`[DeleteRequest] PostID: ${req.params.id}, User: ${req.user.username}`);
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ msg: 'Invalid Post ID' });
+        }
+        const post = await Post.findById(req.params.id);
+        if (!post) {
+            console.log(`[DeleteRequest] Post not found: ${req.params.id}`);
+            return res.status(404).json({ msg: 'Post not found' });
+        }
+
+        console.log(`[DeleteRequest] PostAuthor: ${post.author}, Requester: ${req.user.username}`);
+
+        // Check ownership or admin role
+        if (post.author !== req.user.username && req.user.role !== 'admin') {
+            return res.status(403).json({ msg: 'Access denied. You can only delete your own posts.' });
+        }
+
+        await Post.findByIdAndDelete(req.params.id);
+        console.log(`[DeleteRequest] Successfully deleted post: ${req.params.id}`);
+        res.json({ msg: 'Post deleted successfully' });
+    } catch (err) {
+        console.error(`[DeleteRequest] Error: ${err.message}`);
+        res.status(500).send('Server Error');
+    }
+});
+
 router.get('/', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -54,6 +83,26 @@ router.get('/', async (req, res) => {
 
         const posts = await Post.find().sort({ timestamp: -1 }).skip(skip).limit(limit);
         const total = await Post.countDocuments();
+        
+        res.json({
+            posts,
+            hasMore: skip + posts.length < total,
+            total
+        });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+// Get posts by a specific user
+router.get('/user/:username', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        const posts = await Post.find({ author: req.params.username }).sort({ timestamp: -1 }).skip(skip).limit(limit);
+        const total = await Post.countDocuments({ author: req.params.username });
         
         res.json({
             posts,
@@ -302,6 +351,8 @@ router.post('/:id/comment', auth, async (req, res) => {
     }
 });
 
+// (Moved to top)
+
 // Admin Delete Comment recursive logic
 router.delete('/:id/comment/:commentId', auth, async (req, res) => {
     try {
@@ -337,6 +388,7 @@ router.delete('/:id/comment/:commentId', auth, async (req, res) => {
 
 // Report
 router.post('/:id/report', auth, async (req, res) => {
+    console.log(`[ReportRequest] PostID: ${req.params.id}, Reporter: ${req.user.username}`);
     try {
         let post = await Post.findById(req.params.id);
         if (!post) return res.status(404).json({ msg: 'Post not found' });
@@ -363,4 +415,5 @@ router.post('/:id/report', auth, async (req, res) => {
     }
 });
 
+// Duplicate removal of the previous route at the end of file (I'll just remove it)
 module.exports = router;
