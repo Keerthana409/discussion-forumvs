@@ -31,6 +31,7 @@ app.use('/api/posts', require('./routes/posts'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/usage', require('./routes/usage'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/ai', require('./routes/ai'));
 
 // Root test route (IMPORTANT for Render health check)
 app.get('/', (req, res) => {

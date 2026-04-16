@@ -2,27 +2,7 @@ import React, { useState } from 'react';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 
-const summarizeText = (text, mode = 'short') => {
-  if (!text) return "";
-  let temp = text.replace(/\b(Mr|Mrs|Ms|Dr|Sr|Jr|Prof|vs|etc)\./gi, '$1<dot>').replace(/([A-Z])\./g, '$1<dot>');
-  let rawSentences = temp.match(/[^.!?]+[.!?]+/g) || [text];
-  const sentences = rawSentences.map(s => s.replace(/<dot>/g, '.').trim());
-  
-  if (mode === 'detailed') {
-      let simpleText = sentences.slice(0, Math.min(6, Math.max(5, sentences.length))).join(' ').trim().toLowerCase();
-      const simplifications = {
-          'utilize': 'use', 'facilitate': 'help', 'implement': 'do',
-          'subsequently': 'then', 'optimum': 'best', 'necessitate': 'need', 'commence': 'start'
-      };
-      for(const [complex, simple] of Object.entries(simplifications)) {
-          simpleText = simpleText.replace(new RegExp(`\\b${complex}\\b`, 'g'), simple);
-      }
-      return `In simple words: ${simpleText}`;
-  } else if (mode === 'medium') {
-      return sentences.slice(0, Math.min(3, Math.max(2, sentences.length))).join(' ').trim();
-  }
-  return sentences.slice(0, 1).join(' ').trim();
-};
+// Mock summarizer removed in favor of real AI backend logic
 
 const HighlightedText = ({ text, highlight }) => {
   if (!highlight.trim()) {
@@ -106,6 +86,10 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [summaryMode, setSummaryMode] = useState(null);
+  const [aiSummary, setAiSummary] = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isSpeakingPost, setIsSpeakingPost] = useState(false);
   const [actionProcessing, setActionProcessing] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [confirmUserDelete, setConfirmUserDelete] = useState(false);
@@ -114,6 +98,94 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   React.useEffect(() => {
     setLocalPost(post);
   }, [post]);
+
+  const fetchAiSummary = async (mode) => {
+    if (!mode) return;
+    setIsSummarizing(true);
+    setAiSummary('');
+    try {
+        // Use a timestamp to prevent browser cache from serving stale AI summaries
+        const res = await api.post(`/ai/summarize?t=${Date.now()}`, { content: localPost.content, level: mode.toUpperCase() });
+        setAiSummary(res.summary);
+    } catch (err) {
+        setAiSummary(`Failed to generate summary: ${err.message}`);
+    } finally {
+        setIsSummarizing(false);
+    }
+  };
+
+  const handleSummaryToggle = (mode) => {
+      // Stop speaking if mode changes
+      if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+      }
+
+      if (summaryMode === mode) {
+          setSummaryMode(null);
+          setAiSummary('');
+      } else {
+          setSummaryMode(mode);
+          fetchAiSummary(mode);
+      }
+  };
+
+  const handleListen = () => {
+    if (isSpeaking) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+        return;
+    }
+
+    if (!aiSummary) return;
+
+    // Fix AI pronunciation: replace bounded "AI" with "A I"
+    const parsedSummary = aiSummary.replace(/\bAI\b/gi, 'A I');
+    const utterance = new SpeechSynthesisUtterance(parsedSummary);
+    
+    // Attempt to find an Indian English voice (en-IN)
+    const voices = window.speechSynthesis.getVoices();
+    const indianVoice = voices.find(v => v.lang.includes('en-IN') || v.lang.includes('en_IN'));
+    if (indianVoice) {
+        utterance.voice = indianVoice;
+        utterance.lang = 'en-IN';
+    }
+
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleListenPost = () => {
+    if (isSpeakingPost) {
+        window.speechSynthesis.cancel();
+        setIsSpeakingPost(false);
+        return;
+    }
+
+    if (!localPost.title && !localPost.content) return;
+
+    const postText = `${localPost.title}. ${localPost.content}`;
+    // Fix AI pronunciation
+    const parsedText = postText.replace(/\bAI\b/gi, 'A I');
+    
+    const utterance = new SpeechSynthesisUtterance(parsedText);
+    
+    const voices = window.speechSynthesis.getVoices();
+    const indianVoice = voices.find(v => v.lang.includes('en-IN') || v.lang.includes('en_IN'));
+    if (indianVoice) {
+        utterance.voice = indianVoice;
+        utterance.lang = 'en-IN';
+    }
+
+    utterance.onend = () => setIsSpeakingPost(false);
+    utterance.onerror = () => setIsSpeakingPost(false);
+    
+    setIsSpeakingPost(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleVote = async (type) => {
     if (actionProcessing) return;
@@ -194,8 +266,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     setActionProcessing('delete');
     try {
         console.log(`Attempting to delete post: ${localPost._id}`);
-        const res = await api.delete(`/posts/${localPost._id}`);
-        console.log(`Delete response:`, res);
+        const res = await api.delete(`/posts/${localPost._id}?t=${Date.now()}`);
         showToast("Post deleted successfully", "success");
         setLocalPost({ ...localPost, isDeletedLocally: true });
         if (refreshPosts) refreshPosts();
@@ -297,13 +368,32 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                <div style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase' }}>Summary Length:</span>
                   <div className="summary-options">
-                      <button className="summary-opt-btn" style={summaryMode === 'short' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => setSummaryMode('short')}>Short</button>
-                      <button className="summary-opt-btn" style={summaryMode === 'medium' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => setSummaryMode('medium')}>Medium</button>
-                      <button className="summary-opt-btn" style={summaryMode === 'detailed' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => setSummaryMode('detailed')}>Detailed</button>
+                      <button className="summary-opt-btn" style={summaryMode === 'short' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => handleSummaryToggle('short')}>Short</button>
+                      <button className="summary-opt-btn" style={summaryMode === 'medium' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => handleSummaryToggle('medium')}>Medium</button>
+                      <button className="summary-opt-btn" style={summaryMode === 'detailed' ? { background:'var(--primary-color)', color: '#ffffff' } : {}} onClick={() => handleSummaryToggle('detailed')}>Detailed</button>
                   </div>
               </div>
-              <div className="summary-output">
-                <strong>✨ AI Summary ({summaryMode.charAt(0).toUpperCase() + summaryMode.slice(1)}):</strong> {summarizeText(localPost.content, summaryMode)}
+              <div className="summary-output" style={{ position: 'relative' }}>
+                <strong>✨ AI Summary ({summaryMode.charAt(0).toUpperCase() + summaryMode.slice(1)}):</strong> 
+                {isSummarizing ? (
+                  <span style={{ marginLeft: '10px', opacity: 0.7 }}>
+                    <i className="fa-solid fa-circle-notch fa-spin"></i> Analyzing content...
+                  </span>
+                ) : (
+                  <>
+                    <span> {aiSummary}</span>
+                    {aiSummary && (
+                      <button 
+                        onClick={handleListen} 
+                        className="listen-btn" 
+                        title={isSpeaking ? "Stop Listening" : "Listen to Summary"}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', marginLeft: '8px', fontSize: '1rem', verticalAlign: 'middle', transition: 'transform 0.2s' }}
+                      >
+                        <i className={`fa-solid ${isSpeaking ? 'fa-circle-stop pulse-animation' : 'fa-volume-high'}`}></i>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -311,7 +401,14 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
           {localPost.image && <img src={localPost.image} alt="Post attachment" className="post-attached-image" loading="lazy" />}
 
           <div className="post-actions" onClick={e => e.stopPropagation()}>
-              <button className="action-btn summarize-btn" onClick={() => setSummaryMode(summaryMode ? null : 'short')}>
+              <button 
+                className="action-btn listen-post-btn" 
+                onClick={handleListenPost}
+                style={{ color: isSpeakingPost ? 'var(--primary-color)' : 'inherit' }}
+              >
+                <i className={`fa-solid ${isSpeakingPost ? 'fa-circle-stop pulse-animation' : 'fa-volume-high'}`}></i> {isSpeakingPost ? 'Stop' : 'Listen'}
+              </button>
+              <button className="action-btn summarize-btn" onClick={() => handleSummaryToggle(summaryMode ? null : 'short')}>
                 <i className="fa-solid fa-bolt"></i> Summarize
               </button>
               <button className="action-btn comment-btn" onClick={() => setShowComments(!showComments)}>
