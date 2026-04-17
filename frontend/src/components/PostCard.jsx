@@ -433,49 +433,62 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
 
                                   {currentUser?.role === 'admin' ? (
                                       <>
-                                          {(['under review', 'duplicate', 'similar', 'spam', 'toxic'].includes(localPost.status)) ? (
-                                              <>
-                                                  <button 
-                                                      onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('safe'); }}
-                                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--success)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
-                                                  >
-                                                      <i className="fa-solid fa-check" style={{ marginRight: '8px' }}></i> Approve
-                                                  </button>
-                                                  <button 
-                                                      onClick={(e) => { e.stopPropagation(); handleAdminStatus('remove'); }}
-                                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold' }}
-                                                  >
-                                                      <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`} style={{ marginRight: '8px' }}></i> 
-                                                      {confirmRemove ? 'Confirm?' : (['spam', 'toxic'].includes(localPost.status) ? 'Delete Post' : 'Reject')}
-                                                  </button>
-                                              </>
-                                          ) : (
-                                              <>
-                                                  {localPost.status !== 'spam' && (
-                                                      <button 
-                                                          onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('spam'); }}
-                                                          style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--warning)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
-                                                      >
-                                                          <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '8px' }}></i> Mark Spam
-                                                      </button>
-                                                  )}
-                                                  {localPost.status !== 'toxic' && (
-                                                      <button 
-                                                          onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('toxic'); }}
-                                                          style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
-                                                      >
-                                                          <i className="fa-solid fa-biohazard" style={{ marginRight: '8px' }}></i> Mark Toxic
-                                                      </button>
-                                                  )}
-                                                  <button 
-                                                      onClick={(e) => { e.stopPropagation(); handleAdminStatus('remove'); }}
-                                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold' }}
-                                                  >
-                                                      <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`} style={{ marginRight: '8px' }}></i> 
-                                                      {confirmRemove ? 'Confirm Delete?' : 'Delete'}
-                                                  </button>
-                                              </>
+                                          {/* Approval Action */}
+                                          {(['under review', 'duplicate', 'similar', 'spam', 'toxic'].includes(localPost.status)) && (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('safe'); }}
+                                                  style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--success)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
+                                              >
+                                                  <i className="fa-solid fa-check" style={{ marginRight: '8px' }}></i> Approve
+                                              </button>
                                           )}
+
+                                          {/* AI Flag Removal */}
+                                          {localPost.isAiFlagged && (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('unflag'); }}
+                                                  style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--primary-color)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
+                                              >
+                                                  <i className="fa-solid fa-robot" style={{ marginRight: '8px', opacity: 0.7 }}></i> Remove AI Flag
+                                              </button>
+                                          )}
+
+                                          {/* Status Overrides */}
+                                          {localPost.status !== 'spam' && (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('spam'); }}
+                                                  style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--warning)', borderBottom: '1px solid var(--border-color)' }}
+                                              >
+                                                  <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '8px' }}></i> Mark Spam
+                                              </button>
+                                          )}
+                                          
+                                          {localPost.status !== 'toxic' && (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('toxic'); }}
+                                                  style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', borderBottom: '1px solid var(--border-color)' }}
+                                              >
+                                                  <i className="fa-solid fa-biohazard" style={{ marginRight: '8px' }}></i> Mark Toxic
+                                              </button>
+                                          )}
+
+                                          {localPost.status !== 'duplicate' && (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('duplicate'); }}
+                                                  style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--text-dark)', borderBottom: '1px solid var(--border-color)' }}
+                                              >
+                                                  <i className="fa-solid fa-copy" style={{ marginRight: '8px' }}></i> Mark Duplicate
+                                              </button>
+                                          )}
+
+                                          {/* Critical Actions */}
+                                          <button 
+                                              onClick={(e) => { e.stopPropagation(); handleAdminStatus('remove'); }}
+                                              style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold' }}
+                                          >
+                                              <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`} style={{ marginRight: '8px' }}></i> 
+                                              {confirmRemove ? 'Confirm Delete?' : 'Delete Post'}
+                                          </button>
                                       </>
                                   ) : (
                                       <button 

@@ -49,14 +49,27 @@ router.patch('/post/:id', auth, adminAuth, async (req, res) => {
         if(action === 'safe' || action === 'restore') {
             post.status = 'safe';
             post.hasReport = false;
+            post.isAiFlagged = false;
+            post.aiReason = "";
+        } else if(action === 'unflag') {
+            post.isAiFlagged = false;
+            post.aiReason = "";
         } else if(action === 'remove') {
             post.status = 'removed';
         } else if(action === 'hide') {
             post.status = 'hidden';
         } else if(action === 'spam') {
             post.status = 'spam';
+            post.isAiFlagged = false;
+            post.aiReason = "";
         } else if(action === 'toxic') {
             post.status = 'toxic';
+            post.isAiFlagged = false;
+            post.aiReason = "";
+        } else if(action === 'duplicate') {
+            post.status = 'duplicate';
+            post.isAiFlagged = false;
+            post.aiReason = "";
         } else if(action === 'pin') {
             post.isPinned = !post.isPinned;
         }
