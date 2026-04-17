@@ -41,12 +41,17 @@ router.post('/summarize', async (req, res) => {
             else if (lowerContent.includes("react")) topic = "component-based frontend architecture";
 
             if (level === 'SHORT') {
-                const ideas = [
-                    `This post provides a concise analysis of ${topic}, emphasizing its current industry impact.`,
-                    `The central argument focuses on the trade-offs and future potential of ${topic}.`,
-                    `A high-level overview of how ${topic} is reshaping developer workflows today.`
-                ];
-                summary = ideas[Math.floor(Math.random() * ideas.length)];
+                // If it's a generic topic, try to use the actual content slice for better relevance
+                if (topic === "this discussion") {
+                    summary = getCleanSlice(content, 120);
+                } else {
+                    const ideas = [
+                        `This post provides a concise analysis of ${topic}, emphasizing its current industry impact.`,
+                        `The central argument focuses on the trade-offs and future potential of ${topic}.`,
+                        `A high-level overview of how ${topic} is reshaping developer workflows today.`
+                    ];
+                    summary = ideas[Math.floor(Math.random() * ideas.length)];
+                }
             } else if (level === 'MEDIUM') {
                 summary = `This thread dives into the complexities of ${topic}.\nIt effectively captures both the excitement and the practical challenges faced by engineers.\nThe consensus suggests that while the learning curve is steep, the productivity gains are substantial.\nOverall, it serves as a valuable case study for teams evaluating these technologies.`;
             } else {
