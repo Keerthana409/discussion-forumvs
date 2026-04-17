@@ -90,6 +90,17 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!window.confirm("Are you sure you want to clear all notifications?")) return;
+    try {
+        await api.delete('/notifications');
+        showToast("All notifications cleared", "success");
+        fetchNotifs();
+    } catch (err) {
+        showToast("Failed to clear notifications", "error");
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('nexus_token');
     localStorage.removeItem('nexus_user');
@@ -122,8 +133,13 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
 
           {showNotifPanel && (
             <div ref={panelRef} className="notifications-panel" onClick={e => e.stopPropagation()}>
-              <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', position: 'sticky', top: '0' }}>
+              <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', position: 'sticky', top: '0', zIndex: 10 }}>
                 <span style={{ fontWeight: 600 }}>Notifications</span>
+                {notifs.length > 0 && (
+                  <button onClick={handleClearAll} style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>
+                    Clear All
+                  </button>
+                )}
               </div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '300px', overflowY: 'auto' }}>
                 {notifs.length === 0 ? (
@@ -133,11 +149,21 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
                     <li
                       key={n._id || `notif-${index}`}
                       className={`notif-item ${!n.isRead ? 'unread' : ''}`}
-                      onClick={() => handleNotifClick(n._id)}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', position: 'relative' }}
                     >
-                      <div><strong>{n.sender}</strong> {n.context}</div>
-                      <div className="notif-meta">{new Date(n.timestamp).toLocaleString()}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div onClick={() => handleNotifClick(n._id)} style={{ flex: 1 }}>
+                          <div><strong>{n.sender}</strong> {n.context}</div>
+                          <div className="notif-meta">{new Date(n.timestamp).toLocaleString()}</div>
+                        </div>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); handleNotifClick(n._id); }} 
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 5px', fontSize: '0.9rem' }}
+                            title="Clear"
+                        >
+                          <i className="fa-solid fa-xmark"></i>
+                        </button>
+                      </div>
                       {(n.type === 'admin_spam_alert' || n.type === 'admin_report_alert') && currentUser?.role === 'admin' && (
                         <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                           <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); handleAdminAction(n.postId, 'safe', n._id); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>

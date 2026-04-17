@@ -46,6 +46,20 @@ router.delete('/:id', auth, async (req, res) => {
     }
 });
 
+// Delete all notifications for a specific user
+router.delete('/', auth, async (req, res) => {
+    try {
+        const query = { $or: [{ recipient: req.user.username }] };
+        if (req.user.role === 'admin' || req.user.username === 'Administrator') {
+            query.$or.push({ recipient: 'Administrator' });
+        }
+        await Notification.deleteMany(query);
+        res.json({ msg: 'All notifications cleared' });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
 // Delete all notifications for a specific post
 router.delete('/post/:postId', auth, async (req, res) => {
     try {
