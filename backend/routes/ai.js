@@ -35,10 +35,12 @@ router.post('/summarize', async (req, res) => {
 
             const lowerContent = content.toLowerCase();
             let topic = "this discussion";
-            if (lowerContent.includes("tailwind")) topic = "utility-first CSS frameworks like Tailwind";
-            else if (lowerContent.includes("javascript") || lowerContent.includes("js")) topic = "the modern JavaScript ecosystem";
-            else if (lowerContent.includes("ai") || lowerContent.includes("intelligence")) topic = "AI integration in software development";
-            else if (lowerContent.includes("react")) topic = "component-based frontend architecture";
+            
+            // Re-evaluating topics using word boundaries for accuracy
+            if (/\btailwind\b/i.test(content)) topic = "utility-first CSS frameworks like Tailwind";
+            else if (/\b(javascript|js)\b/i.test(content)) topic = "the modern JavaScript ecosystem";
+            else if (/\b(ai|intelligence)\b/i.test(content)) topic = "AI integration in software development";
+            else if (/\breact\b/i.test(content)) topic = "component-based frontend architecture";
 
             if (level === 'SHORT') {
                 // If it's a generic topic, try to use the actual content slice for better relevance
