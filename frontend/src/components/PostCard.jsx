@@ -87,6 +87,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [newComment, setNewComment] = useState('');
   const [summaryMode, setSummaryMode] = useState(null);
   const [aiSummary, setAiSummary] = useState('');
+  const [aiMode, setAiMode] = useState('REAL');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isSpeakingPost, setIsSpeakingPost] = useState(false);
@@ -111,6 +112,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
         // Use a timestamp to prevent browser cache from serving stale AI summaries
         const res = await api.post(`/ai/summarize?t=${Date.now()}`, { content: localPost.content, level: mode.toUpperCase() });
         setAiSummary(res.summary);
+        setAiMode(res.mode || 'REAL');
     } catch (err) {
         setAiSummary(`Failed to generate summary: ${err.message}`);
     } finally {
@@ -558,7 +560,9 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                   </div>
               </div>
               <div className="summary-output" style={{ position: 'relative' }}>
-                <strong>✨ AI Summary ({summaryMode.charAt(0).toUpperCase() + summaryMode.slice(1)}):</strong> 
+                <strong>
+                    {aiMode === 'PREVIEW' ? '🧪 Preview' : '✨ AI'} Summary ({summaryMode.charAt(0).toUpperCase() + summaryMode.slice(1)}):
+                 </strong> 
                 {isSummarizing ? (
                   <span style={{ marginLeft: '10px', opacity: 0.7 }}>
                     <i className="fa-solid fa-circle-notch fa-spin"></i> Analyzing content...
