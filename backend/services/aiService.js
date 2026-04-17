@@ -45,57 +45,56 @@ class AiService {
     }
 
     /**
-     * Attempts to summarize content without a real AI.
-     * Use sentence extraction and "rephrasing" patterns.
+     * Advanced Extractive Summarizer
+     * Uses word frequency and sentence scoring to simulate AI summarization.
      */
     generateHeuristicSummary(content, level) {
-        if (!content) return "";
+        if (!content || content.length < 50) return content;
 
-        // Clean content
         const cleanContent = content.trim().replace(/\s+/g, ' ');
-        // Split into sentences (simple regex)
-        const sentences = cleanContent.split(/[.!?]+\s/).filter(s => s.length > 10);
-        
-        if (sentences.length === 0) return cleanContent.slice(0, 100) + "...";
+        // Improved sentence splitting to better handle periods and abbreviations
+        const sentences = cleanContent.split(/(?<=[.!?])\s+(?=[A-Z])/).filter(s => s.length > 10);
+        if (sentences.length <= 1) return content;
 
-        const firstSentence = sentences[0];
-        const lastSentence = sentences.length > 1 ? sentences[sentences.length - 1] : "";
-        const middleSentence = sentences.length > 2 ? sentences[Math.floor(sentences.length / 2)] : "";
+        // 1. Calculate word frequencies (ignoring "stop words")
+        const stopWords = new Set(['the', 'and', 'that', 'this', 'with', 'from', 'they', 'have', 'been', 'which', 'about', 'their', 'there', 'because', 'through']);
+        const words = cleanContent.toLowerCase().match(/\b\w{4,}\b/g) || [];
+        const freqMap = {};
+        words.forEach(w => {
+            if (!stopWords.has(w)) freqMap[w] = (freqMap[w] || 0) + 1;
+        });
 
-        // Identify tech keywords for context
-        const techTopics = {
-            tailwind: "utility-first styling",
-            javascript: "the JS ecosystem",
-            react: "component architecture",
-            ai: "artificial intelligence",
-            database: "data persistence"
-        };
-        
-        let foundTopic = "this discussion";
-        for (const [key, label] of Object.entries(techTopics)) {
-            if (content.toLowerCase().includes(key)) {
-                foundTopic = label;
-                break;
-            }
-        }
+        // 2. Score sentences based on word frequencies
+        const scoredSentences = sentences.map((s, index) => {
+            const sWords = s.toLowerCase().match(/\b\w{4,}\b/g) || [];
+            let score = 0;
+            sWords.forEach(w => {
+                if (freqMap[w]) score += freqMap[w];
+            });
+            // Position-based boosting (Intro and Conclusion sentences are often most relevant)
+            if (index === 0) score *= 1.5;
+            if (index === sentences.length - 1) score *= 1.3;
+            return { text: s.trim(), score, index };
+        });
 
+        // 3. Select top sentences based on length and relevance
+        const count = level === 'SHORT' ? 1 : (level === 'MEDIUM' ? 3 : 5);
+        const topSentences = scoredSentences
+            .sort((a, b) => b.score - a.score)
+            .slice(0, Math.min(count, sentences.length))
+            .sort((a, b) => a.index - b.index); // Restore original order for readability
+
+        // 4. Format into a professional summary
         if (level === 'SHORT') {
-            // Pick the most representative sentence or combine first and last if and meaningful
-            return `Key Insight: ${firstSentence.length < 120 ? firstSentence : firstSentence.slice(0, 120) + "..."}`;
+            const bestSentence = topSentences[0].text;
+            return `AI Synthesis: This discussion highlights that ${bestSentence.charAt(0).toLowerCase() + bestSentence.slice(1)}`;
         }
 
-        if (level === 'MEDIUM') {
-            const part1 = `The author explores ${foundTopic}, opening with: "${firstSentence.slice(0, 80)}..."`;
-            const part2 = middleSentence ? ` They further address that ${middleSentence.slice(0, 100)}.` : "";
-            return `${part1}${part2}\nIn conclusion, the post highlights meaningful perspectives on ${foundTopic}.`;
-        }
-
-        // DETAILED
-        const part1 = `In this deep-dive into ${foundTopic}, the core premise is established as: "${firstSentence.slice(0, 100)}..."`;
-        const part2 = middleSentence ? `\nThe discussion expands on various technical nuances, specifically noting: "${middleSentence.slice(0, 120)}..."` : "";
-        const part3 = lastSentence ? `\nFinally, the author concludes with a focused takeaway: "${lastSentence.slice(0, 100)}..."` : "";
+        const summaryBody = topSentences.map(s => s.text).join('. ');
+        const intro = `Generative Overview: The content explores complex themes with a focus on data and context. `;
+        const detailedConclusion = `\n\nOverall, the analysis suggests these points represent the core argument of the discussion.`;
         
-        return `${part1}${part2}${part3}\nOverall, this thread serves as a valuable resource for understanding ${foundTopic} within the current developer workflow.`;
+        return `${intro}${summaryBody}${level === 'DETAILED' ? detailedConclusion : ''}`;
     }
 
     async getSummary(content, level) {
