@@ -93,6 +93,10 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
   const [actionProcessing, setActionProcessing] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [confirmUserDelete, setConfirmUserDelete] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
   const { showToast } = useToast();
 
   React.useEffect(() => {
@@ -279,6 +283,29 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
     }
   };
 
+  const handleEditClick = () => {
+    setEditTitle(localPost.title);
+    setEditContent(localPost.content);
+    setIsEditing(true);
+    setShowMenu(false);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.stopPropagation();
+    if (actionProcessing) return;
+    setActionProcessing('edit');
+    try {
+      const updatedPost = await api.put(`/posts/${localPost._id}`, { title: editTitle, content: editContent });
+      setLocalPost(updatedPost);
+      setIsEditing(false);
+      showToast("Post updated successfully", "success");
+    } catch(err) {
+      showToast(err.message || "Failed to edit post", "error");
+    } finally {
+      setActionProcessing(null);
+    }
+  };
+
   const handlePostClick = async () => {
     try {
         await api.delete(`/notifications/post/${localPost._id}`);
@@ -344,24 +371,124 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
               <span>Posted by <strong>u/{localPost.author}</strong></span>
               <span>•</span>
               <span>{new Date(localPost.timestamp).toLocaleString()}</span>
-              <div style={{ marginLeft: 'auto' }}>{statusLabel}</div>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {statusLabel}
+                  {currentUser && (localPost.author === currentUser.username || currentUser.role === 'admin') && (
+                      <div style={{ position: 'relative' }}>
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--text-muted)' }}
+                          >
+                              <i className="fa-solid fa-ellipsis-vertical"></i>
+                          </button>
+                          {showMenu && (
+                              <div className="post-options-menu" style={{
+                                  position: 'absolute', right: 0, top: '100%',
+                                  background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                                  borderRadius: '4px', boxShadow: 'var(--shadow)', zIndex: 10,
+                                  minWidth: '120px', display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                              }}>
+                                  <button 
+                                      onClick={(e) => { e.stopPropagation(); handleEditClick(); }}
+                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-dark)' }}
+                                  >
+                                      <i className="fa-solid fa-pen" style={{ marginRight: '8px' }}></i> Edit Post
+                                  </button>
+
+                                  {currentUser?.role === 'admin' ? (
+                                      <>
+                                          {(['under review', 'duplicate', 'similar', 'spam'].includes(localPost.status)) ? (
+                                              <>
+                                                  <button 
+                                                      onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('safe'); }}
+                                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--success)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
+                                                  >
+                                                      <i className="fa-solid fa-check" style={{ marginRight: '8px' }}></i> Approve
+                                                  </button>
+                                                  <button 
+                                                      onClick={(e) => { e.stopPropagation(); handleAdminStatus('remove'); }}
+                                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold' }}
+                                                  >
+                                                      <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`} style={{ marginRight: '8px' }}></i> 
+                                                      {confirmRemove ? 'Confirm?' : (localPost.status === 'spam' ? 'Delete Post' : 'Reject')}
+                                                  </button>
+                                              </>
+                                          ) : (
+                                              <>
+                                                  {localPost.status !== 'spam' && (
+                                                      <button 
+                                                          onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('spam'); }}
+                                                          style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--warning)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
+                                                      >
+                                                          <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '8px' }}></i> Mark Spam
+                                                      </button>
+                                                  )}
+                                                  <button 
+                                                      onClick={(e) => { e.stopPropagation(); handleAdminStatus('remove'); }}
+                                                      style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold' }}
+                                                  >
+                                                      <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`} style={{ marginRight: '8px' }}></i> 
+                                                      {confirmRemove ? 'Confirm Delete?' : 'Delete'}
+                                                  </button>
+                                              </>
+                                          )}
+                                      </>
+                                  ) : (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); getUserDeleteAction(); }}
+                                          style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)' }}
+                                      >
+                                          <i className={`fa-solid ${confirmUserDelete ? 'fa-triangle-exclamation' : 'fa-trash'}`} style={{ marginRight: '8px' }}></i> 
+                                          {confirmUserDelete ? 'Confirm?' : 'Delete'}
+                                      </button>
+                                  )}
+                              </div>
+                          )}
+                      </div>
+                  )}
+              </div>
           </div>
 
-          <h3 className="post-title">
-            {localPost.isPinned && <i className="fa-solid fa-thumbtack pinned-icon"></i>}
-            {' '}
-            <HighlightedText text={localPost.title} highlight={searchQuery} />
-          </h3>
+          {isEditing ? (
+              <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: '10px' }} onClick={e => e.stopPropagation()}>
+                  <input 
+                      type="text" 
+                      value={editTitle} 
+                      onChange={e => setEditTitle(e.target.value)}
+                      style={{ padding: '8px', fontSize: '1.2rem', fontWeight: 'bold', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-card)', color: 'var(--text-dark)' }}
+                  />
+                  <textarea 
+                      value={editContent} 
+                      onChange={e => setEditContent(e.target.value)}
+                      rows={5}
+                      style={{ padding: '8px', fontFamily: 'inherit', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-card)', color: 'var(--text-dark)', resize: 'vertical' }}
+                  ></textarea>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                      <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} style={{ background: 'var(--bg-light)', color: 'var(--text-dark)', border: '1px solid var(--border-color)' }}>Cancel</button>
+                      <button className="btn btn-primary btn-sm" onClick={handleEditSubmit} disabled={actionProcessing === 'edit'}>
+                          {actionProcessing === 'edit' ? 'Saving...' : 'Save'}
+                      </button>
+                  </div>
+              </div>
+          ) : (
+              <>
+                  <h3 className="post-title">
+                    {localPost.isPinned && <i className="fa-solid fa-thumbtack pinned-icon"></i>}
+                    {' '}
+                    <HighlightedText text={localPost.title} highlight={searchQuery || ''} />
+                  </h3>
 
-          <div style={{ marginBottom: '0.5em', display: 'flex', gap: '0.3rem' }}>
-            {localPost.tags?.map((t, i) => (
-              <span key={i} className="post-tag badge" style={{ color: 'var(--text-dark)' }} onClick={() => setTagFilter(t)}>{t}</span>
-            ))}
-          </div>
+                  <div style={{ marginBottom: '0.5em', display: 'flex', gap: '0.3rem' }}>
+                    {localPost.tags?.map((t, i) => (
+                      <span key={i} className="post-tag badge" style={{ color: 'var(--text-dark)' }} onClick={() => setTagFilter(t)}>{t}</span>
+                    ))}
+                  </div>
 
-          <div className="post-body">
-            <HighlightedText text={localPost.content} highlight={searchQuery} />
-          </div>
+                  <div className="post-body">
+                    <HighlightedText text={localPost.content} highlight={searchQuery || ''} />
+                  </div>
+              </>
+          )}
 
           {summaryMode && (
             <div className="post-summary" style={{ marginBottom: '1rem', padding: '0.8rem', background: 'var(--secondary-color)', borderLeft: '3px solid var(--primary-color)', borderRadius: '4px', fontStyle: 'italic', fontSize: '0.9rem', color: 'var(--text-dark)' }}>
@@ -415,18 +542,6 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                 <i className="fa-regular fa-comment-dots"></i> {localPost.comments ? localPost.comments.length : 0} Comments
               </button>
 
-              {currentUser && localPost.author === currentUser.username && (
-                <button 
-                  className={`action-btn delete-btn ${confirmUserDelete ? 'confirming' : ''}`} 
-                  onClick={getUserDeleteAction} 
-                  style={{ color: confirmUserDelete ? 'white' : 'var(--danger)', backgroundColor: confirmUserDelete ? 'var(--danger)' : 'var(--secondary-color)', fontWeight: confirmUserDelete ? 'bold' : '600' }}
-                >
-                    <i className={`fa-solid ${actionProcessing === 'delete' ? 'fa-spinner fa-spin' : (confirmUserDelete ? 'fa-triangle-exclamation' : 'fa-trash-can')}`}></i> 
-                    {' '}
-                    {actionProcessing === 'delete' ? 'Deleting...' : (confirmUserDelete ? 'Confirm Delete?' : 'Delete')}
-                </button>
-              )}
-
               {currentUser?.role !== 'admin' && (
                 localPost.hasReport ? (
                   <button className="action-btn" disabled style={{ opacity: 0.6, cursor: 'not-allowed', color: 'var(--danger)' }}>
@@ -439,55 +554,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                 )
               )}
 
-              {currentUser?.role === 'admin' && (
-                <>
-                  {(['under review', 'duplicate', 'similar', 'spam'].includes(localPost.status)) ? (
-                    <>
-                      <button className="action-btn admin-approve-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('safe')} style={{ color: 'var(--success)', borderColor: 'var(--success)', fontWeight: 'bold' }}>
-                        <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {actionProcessing === 'admin' ? 'Wait...' : 'Approve'}
-                      </button>
-                      <button 
-                        className="action-btn admin-reject-btn" 
-                        disabled={actionProcessing === 'admin'} 
-                        onClick={() => handleAdminStatus('remove')} 
-                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 'bold' }}
-                      >
-                        <i className={`fa-solid ${actionProcessing === 'admin' ? 'fa-spinner fa-spin' : (confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can')}`}></i> 
-                        {' '}
-                        {actionProcessing === 'admin' ? 'Wait...' : (confirmRemove ? 'Confirm?' : (localPost.status === 'spam' ? 'Delete Post' : 'Reject'))}
-                      </button>
-                      {confirmRemove && (
-                        <button className="action-btn" onClick={() => setConfirmRemove(false)} style={{ color: 'var(--text-muted)' }}>
-                          Cancel
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {localPost.status !== 'spam' && (
-                        <button className="action-btn" disabled={actionProcessing === 'admin'} onClick={() => handleAdminStatus('spam')} style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
-                          <i className="fa-solid fa-triangle-exclamation"></i> Mark Spam
-                        </button>
-                      )}
-                      <button 
-                        className="action-btn" 
-                        disabled={actionProcessing === 'admin'} 
-                        onClick={() => handleAdminStatus('remove')} 
-                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                      >
-                        <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`}></i>
-                        {' '}
-                        {confirmRemove ? 'Confirm Delete?' : 'Delete'}
-                      </button>
-                      {confirmRemove && (
-                        <button className="action-btn" onClick={() => setConfirmRemove(false)} style={{ color: 'var(--text-muted)' }}>
-                          Cancel
-                        </button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+
 
               <div className="emoji-reactions" style={{ display: 'flex', gap: '0.4rem' }}>
                 {[

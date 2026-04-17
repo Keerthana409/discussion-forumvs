@@ -75,6 +75,33 @@ router.delete('/:id', auth, async (req, res) => {
     }
 });
 
+// Edit a post by the author
+router.put('/:id', auth, async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ msg: 'Invalid Post ID' });
+        }
+        const post = await Post.findById(req.params.id);
+        if (!post) {
+            return res.status(404).json({ msg: 'Post not found' });
+        }
+
+        if (post.author !== req.user.username && req.user.role !== 'admin') {
+            return res.status(403).json({ msg: 'Access denied. You can only edit your own posts.' });
+        }
+
+        const { title, content } = req.body;
+        if (title) post.title = title;
+        if (content) post.content = content;
+
+        await post.save();
+        res.json(post);
+    } catch (err) {
+        console.error(`[EditRequest] Error: ${err.message}`);
+        res.status(500).send('Server Error');
+    }
+});
+
 router.get('/', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;

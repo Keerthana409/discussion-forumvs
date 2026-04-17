@@ -69,16 +69,29 @@ const Forum = ({ theme, toggleTheme }) => {
           setIsFetchingMore(false);
       }
     }
-  }, []);
+  }, [filter, currentUser?.username]);
 
   useEffect(() => {
     fetchPosts(1, true);
     
     // Usage tracker logic
-    let sessionMinutes = parseInt(localStorage.getItem('df_sessionMinutes')) || 0;
+    const updateSessionDate = () => {
+      const today = new Date().toDateString();
+      if (localStorage.getItem('df_lastSessionDate') !== today) {
+        localStorage.setItem('df_sessionMinutes', '0');
+        localStorage.setItem('df_lastSessionDate', today);
+        return 0;
+      }
+      return parseInt(localStorage.getItem('df_sessionMinutes')) || 0;
+    };
+
+    let sessionMinutes = updateSessionDate();
+
     const usageInterval = setInterval(async () => {
+      sessionMinutes = updateSessionDate();
       sessionMinutes++;
       localStorage.setItem('df_sessionMinutes', sessionMinutes);
+      
       if (sessionMinutes > 0 && sessionMinutes % 15 === 0) setUsageWarning(true);
       try {
         await api.post('/usage');
