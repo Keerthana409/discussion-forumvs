@@ -39,13 +39,7 @@ router.post('/generate-metadata', auth, async (req, res) => {
         const status = aiService.getStatus();
         
         if (status.mode === 'PREVIEW') {
-            let result = "";
-            if (type === 'title') {
-                const words = content.split(' ');
-                result = "Discussion: " + words.slice(0, 4).join(' ') + "...";
-            } else {
-                result = "AI, Generated, Content";
-            }
+            const result = aiService.generateHeuristicMetadata(content, type);
             return res.json({ result, ...status });
         }
 

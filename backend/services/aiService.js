@@ -24,6 +24,27 @@ class AiService {
     }
 
     /**
+     * Extracts keywords to create smart tags and titles without an AI key.
+     */
+    generateHeuristicMetadata(content, type) {
+        const cleanContent = content.trim().replace(/[^\w\s]/gi, '');
+        const words = cleanContent.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+        
+        // Remove common filler words
+        const stopWords = ['would', 'could', 'should', 'there', 'their', 'about', 'these', 'those'];
+        const keywords = [...new Set(words.filter(w => !stopWords.includes(w)))];
+
+        if (type === 'title') {
+            const words = content.split(' ').filter(w => w.length > 2);
+            return words.slice(0, 5).join(' ') + (words.length > 5 ? '...' : '');
+        }
+
+        // Tags logic: Pick 3-5 unique keywords
+        if (keywords.length < 2) return "General, Discussion, Platform";
+        return keywords.slice(0, 4).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(', ');
+    }
+
+    /**
      * Attempts to summarize content without a real AI.
      * Use sentence extraction and "rephrasing" patterns.
      */
