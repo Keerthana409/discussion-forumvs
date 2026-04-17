@@ -43,7 +43,7 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
   const handleNotifToggle = async () => {
     const isOpening = !showNotifPanel;
     setShowNotifPanel(isOpening);
-    
+
     if (isOpening) {
       const unreadCount = notifs.filter(n => !n.isRead).length;
       if (unreadCount > 0) {
@@ -60,19 +60,19 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
   const handleAdminAction = async (postId, action, notificationId) => {
     try {
       if (action === 'remove') {
-          // Permanent delete as requested
-          await api.delete(`/admin/post/${postId}`);
-          showToast(`Post has been permanently deleted.`, 'success');
+        // Permanent delete as requested
+        await api.delete(`/admin/post/${postId}`);
+        showToast(`Post has been permanently deleted.`, 'success');
       } else {
-          await api.patch(`/admin/post/${postId}`, { action });
-          showToast(`Post has been successfully marked as ${action}.`, 'success');
+        await api.patch(`/admin/post/${postId}`, { action });
+        showToast(`Post has been successfully marked as ${action}.`, 'success');
       }
-      
+
       // Delete the notification after successful action
       if (notificationId) {
         await api.delete(`/notifications/${notificationId}`);
       }
-      
+
       setShowNotifPanel(false);
       fetchNotifs();
       // Notice: Removed refreshPosts() to prevent resetting to Page 1.
@@ -107,11 +107,11 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
         <button className="theme-toggle-btn" onClick={toggleTheme} title="Toggle Dark Mode">
           <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
         </button>
-        
+
         <div className="time-tracking" onClick={openTimeModal} style={{ position: 'relative', cursor: 'pointer', marginLeft: '0.5rem' }} title="Time Tracking">
           <i className="fa-solid fa-clock" style={{ fontSize: '1.2rem' }}></i>
         </div>
-        
+
         <div className="notifications" style={{ position: 'relative', cursor: 'pointer', marginLeft: '0.5rem' }} id="notif-toggle" onClick={handleNotifToggle}>
           <i className="fa-solid fa-bell" style={{ fontSize: '1.2rem' }}></i>
           {unreadCount > 0 && (
@@ -119,7 +119,7 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
               {unreadCount}
             </span>
           )}
-          
+
           {showNotifPanel && (
             <div ref={panelRef} className="notifications-panel" onClick={e => e.stopPropagation()}>
               <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', position: 'sticky', top: '0' }}>
@@ -130,8 +130,8 @@ const Navbar = ({ theme, toggleTheme, currentUser, openTimeModal }) => {
                   <li style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center' }}>No notifications yet.</li>
                 ) : (
                   notifs.map((n, index) => (
-                    <li 
-                      key={n._id || `notif-${index}`} 
+                    <li
+                      key={n._id || `notif-${index}`}
                       className={`notif-item ${!n.isRead ? 'unread' : ''}`}
                       onClick={() => handleNotifClick(n._id)}
                       style={{ cursor: 'pointer' }}

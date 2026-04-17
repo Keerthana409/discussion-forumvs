@@ -22,6 +22,8 @@ router.get('/stats', auth, adminAuth, async (req, res) => {
         const stats = {
             totalPosts: posts.length,
             spamPosts: posts.filter(p => p.status === 'spam').length,
+            toxicPosts: posts.filter(p => p.status === 'toxic').length,
+            aiFlaggedPosts: posts.filter(p => p.isAiFlagged).length,
             duplicatePosts: posts.filter(p => p.status === 'duplicate').length,
             similarPosts: posts.filter(p => p.status === 'similar').length,
             removedPosts: posts.filter(p => p.status === 'removed').length,
@@ -53,6 +55,8 @@ router.patch('/post/:id', auth, adminAuth, async (req, res) => {
             post.status = 'hidden';
         } else if(action === 'spam') {
             post.status = 'spam';
+        } else if(action === 'toxic') {
+            post.status = 'toxic';
         } else if(action === 'pin') {
             post.isPinned = !post.isPinned;
         }

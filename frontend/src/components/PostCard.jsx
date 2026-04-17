@@ -328,27 +328,63 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
 
   let statusLabel = null;
   let borderLeftStyle = '';
+  const isAi = localPost.isAiFlagged;
+
+  const handleAiBadgeClick = (e) => {
+    e.stopPropagation();
+    if (localPost.aiReason) {
+        showToast(`✨ AI Notice: ${localPost.aiReason}`, "info");
+    } else if (localPost.status === 'under review' && localPost.reportReason) {
+        showToast(`🚩 Report Reason: ${localPost.reportReason}`, "info");
+    }
+  };
+
   if (localPost.status === 'spam') {
-        statusLabel = (
-          <span className="badge badge-danger">
-            ⚠️ Spam
+    statusLabel = (
+        <div className="badge-reason-wrapper">
+          <span className="badge badge-danger" style={{ cursor: 'pointer' }} onClick={handleAiBadgeClick}>
+            {isAi ? '🤖 AI Spam' : '⚠️ Spam'}
           </span>
-        );
-        borderLeftStyle = "4px solid var(--danger)";
+          <span className="badge-reason-tooltip">{localPost.aiReason || "Flagged for spam patterns."}</span>
+        </div>
+    );
+    borderLeftStyle = "4px solid var(--danger)";
+  } else if (localPost.status === 'toxic') {
+    statusLabel = (
+        <div className="badge-reason-wrapper">
+          <span className="badge badge-danger" style={{ cursor: 'pointer' }} onClick={handleAiBadgeClick}>
+            {isAi ? '🤖 AI Toxic' : '☣️ Toxic'}
+          </span>
+          <span className="badge-reason-tooltip">{localPost.aiReason || "Flagged for harmful language."}</span>
+        </div>
+    );
+    borderLeftStyle = "4px solid var(--danger)";
   } else if (localPost.status === 'duplicate') {
-        statusLabel = (
-            <span className="badge badge-warning">
-                📋 Duplicate {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
+    statusLabel = (
+        <div className="badge-reason-wrapper">
+            <span className="badge badge-warning" style={{ cursor: 'pointer' }} onClick={handleAiBadgeClick}>
+                {isAi ? '🤖 AI Duplicate' : '📋 Duplicate'} {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
             </span>
-        );
+            <span className="badge-reason-tooltip">{localPost.aiReason || "Matches an existing post."}</span>
+        </div>
+    );
   } else if (localPost.status === 'similar') {
-        statusLabel = (
-            <span className="badge badge-warning">
-                📋 Similar {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
+    statusLabel = (
+        <div className="badge-reason-wrapper">
+            <span className="badge badge-warning" style={{ cursor: 'pointer' }} onClick={handleAiBadgeClick}>
+                {isAi ? '🤖 AI Similar' : '📋 Similar'} {currentUser?.role === 'admin' && localPost.similarTo && <small style={{display:'block', fontSize:'0.6rem'}}>Ref ID: {localPost.similarTo.slice(-6)}</small>}
             </span>
-        );
+            <span className="badge-reason-tooltip">{localPost.aiReason || "Similar to existing content."}</span>
+        </div>
+    );
   } else if (localPost.status === 'under review') {
-        statusLabel = <span className="badge badge-warning">🚩 Under Review</span>;
+        const reportText = localPost.reportReason ? `Reported by a user: ${localPost.reportReason}` : "Reported by a user";
+        statusLabel = (
+            <div className="badge-reason-wrapper">
+                <span className="badge badge-warning" style={{ cursor: 'pointer' }} onClick={handleAiBadgeClick}>🚩 Under Review</span>
+                <span className="badge-reason-tooltip">{reportText}</span>
+            </div>
+        );
         borderLeftStyle = "4px solid var(--warning)";
   } else if (localPost.status === 'removed') {
         statusLabel = <span className="badge badge-danger">❌ Removed</span>;
@@ -397,7 +433,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
 
                                   {currentUser?.role === 'admin' ? (
                                       <>
-                                          {(['under review', 'duplicate', 'similar', 'spam'].includes(localPost.status)) ? (
+                                          {(['under review', 'duplicate', 'similar', 'spam', 'toxic'].includes(localPost.status)) ? (
                                               <>
                                                   <button 
                                                       onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('safe'); }}
@@ -410,7 +446,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                                                       style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold' }}
                                                   >
                                                       <i className={`fa-solid ${confirmRemove ? 'fa-triangle-exclamation' : 'fa-trash-can'}`} style={{ marginRight: '8px' }}></i> 
-                                                      {confirmRemove ? 'Confirm?' : (localPost.status === 'spam' ? 'Delete Post' : 'Reject')}
+                                                      {confirmRemove ? 'Confirm?' : (['spam', 'toxic'].includes(localPost.status) ? 'Delete Post' : 'Reject')}
                                                   </button>
                                               </>
                                           ) : (
@@ -421,6 +457,14 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                                                           style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--warning)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
                                                       >
                                                           <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '8px' }}></i> Mark Spam
+                                                      </button>
+                                                  )}
+                                                  {localPost.status !== 'toxic' && (
+                                                      <button 
+                                                          onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleAdminStatus('toxic'); }}
+                                                          style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--danger)', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}
+                                                      >
+                                                          <i className="fa-solid fa-biohazard" style={{ marginRight: '8px' }}></i> Mark Toxic
                                                       </button>
                                                   )}
                                                   <button 
@@ -478,9 +522,9 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                     <HighlightedText text={localPost.title} highlight={searchQuery || ''} />
                   </h3>
 
-                  <div style={{ marginBottom: '0.5em', display: 'flex', gap: '0.3rem' }}>
+                  <div className="post-tags-container">
                     {localPost.tags?.map((t, i) => (
-                      <span key={i} className="post-tag badge" style={{ color: 'var(--text-dark)' }} onClick={() => setTagFilter(t)}>{t}</span>
+                      <span key={i} className="post-tag badge" style={{ color: 'var(--text-dark)' }} onClick={(e) => { e.stopPropagation(); setTagFilter(t); }}>{t}</span>
                     ))}
                   </div>
 

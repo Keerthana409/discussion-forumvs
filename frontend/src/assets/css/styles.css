@@ -406,7 +406,7 @@ body.dark-mode .password-toggle:hover {
 }
 
 /* Post Feed UI Layout */
-.post-card { display: flex; gap: 1rem; padding: 0; overflow: hidden; }
+.post-card { display: flex; gap: 1rem; padding: 0; overflow: visible; }
 .post-votes {
     background: var(--secondary-color);
     padding: 0.5rem;
@@ -427,6 +427,19 @@ body.dark-mode .password-toggle:hover {
 .post-meta strong { color: var(--text-dark); }
 .post-tag { cursor:pointer; background: var(--secondary-color); padding: 0.1rem 0.5rem; border-radius: 9999px; border: 1px solid var(--border-color);}
 .post-tag:hover { background: var(--border-color); }
+.post-tags-container {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none; /* Hide for Firefox */
+    -ms-overflow-style: none; /* Hide for IE/Edge */
+    padding-bottom: 4px;
+    margin-bottom: 0.8rem;
+    flex-wrap: nowrap;
+}
+.post-tags-container::-webkit-scrollbar {
+    display: none; /* Hide for Chrome, Safari, Opera */
+}
 .post-title { font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-dark); font-weight: 600; }
 .post-body { color: var(--text-dark); font-size: 0.95rem; margin-bottom: 1rem; overflow-wrap: break-word; }
 .post-attached-image { 
@@ -464,6 +477,44 @@ body.dark-mode .password-toggle:hover {
 .badge-danger { background: var(--danger); color: #fff; }
 .badge-success { background: var(--success); color: #fff; }
 .badge-warning { background: var(--warning); color: #000; }
+.badge-reason-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+.badge-reason-tooltip {
+    visibility: hidden;
+    width: 200px;
+    background-color: var(--text-dark);
+    color: #fff;
+    text-align: center;
+    border-radius: 8px;
+    padding: 8px;
+    position: absolute;
+    z-index: 1001;
+    top: 125%; /* Drop below the badge */
+    right: 0; /* Align to the right edge of the wrapper */
+    opacity: 0;
+    transition: opacity 0.3s, visibility 0.3s;
+    font-size: 0.75rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    pointer-events: none;
+    line-height: 1.4;
+}
+.badge-reason-tooltip::after {
+    content: "";
+    position: absolute;
+    bottom: 100%; /* At the top of the tooltip */
+    right: 15px; /* Arrow near the right edge */
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent var(--text-dark) transparent;
+}
+.badge-reason-wrapper:hover .badge-reason-tooltip {
+    visibility: visible;
+    opacity: 1;
+}
 
 .filter-btn { padding: 0.4rem 1rem; border-radius: 999px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-dark); font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;}
 .filter-btn:hover { background: var(--secondary-color); }

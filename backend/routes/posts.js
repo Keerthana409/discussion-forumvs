@@ -18,17 +18,29 @@ const checkSpamAI = async (title, content) => {
     if (isPlaceholder) {
         // Fallback to basic keyword check if AI key is missing
         const lowerText = text.toLowerCase();
-        const spamKeywords = ['buy', 'free', 'discount', 'prize', 'earn money', 'bitcoin', 'crypto'];
-        const toxicityKeywords = ['hate', 'kill', 'abuse', 'fraud', 'jerk'];
+        const spamKeywords = ['buy', 'free', 'discount', 'prize', 'earn money', 'bitcoin', 'crypto', 'scam'];
+        const toxicityKeywords = ['hate', 'kill', 'abuse', 'fraud', 'jerk', 'loser'];
         
-        let score = 0;
-        spamKeywords.forEach(word => { if (lowerText.includes(word)) score += 2; });
-        if (score > 3) return 'spam';
+        const matchedSpam = spamKeywords.filter(word => lowerText.includes(word));
+        const matchedToxic = toxicityKeywords.filter(word => {
+            const regex = new RegExp(`\\b${word}\\b`, 'i');
+            return regex.test(lowerText);
+        });
         
-        const hasToxic = toxicityKeywords.some(word => lowerText.includes(word));
-        if (hasToxic) return 'toxic';
+        if (matchedToxic.length > 0) {
+            return { 
+                category: 'toxic', 
+                reason: `Internal detection: Found toxic words such as: ${matchedToxic.join(', ')}.` 
+            };
+        }
+        if (matchedSpam.length > 0) {
+            return { 
+                category: 'spam', 
+                reason: `Internal detection: Found spam keywords such as: ${matchedSpam.join(', ')}.` 
+            };
+        }
         
-        return 'safe';
+        return { category: 'safe', reason: "" };
     }
 
     try {
@@ -37,21 +49,47 @@ const checkSpamAI = async (title, content) => {
             Analyze the following forum post for spam or toxicity.
             Classify it into one of these three categories: "safe", "spam", or "toxic".
             
+            DEFINITIONS:
             - "spam": Promotional content, ads, bot-like repetitive text, or suspicious links.
             - "toxic": Hate speech, threats, direct insults, or extreme profanity.
-            - "safe": Normal discussion, questions, or helpful content.
+            - "safe": Normal discussion, educational content, questions, or news.
             
-            Provide only the category name in lowercase.
+            PRECISION RULES:
+            1. Discussion of sensitive topics (like unemployment, immigration, or politics) in a neutral, informative, or educational manner is ALWAYS "safe".
+            2. Only flag as "toxic" if the language is objectively aggressive, hateful, or abusive.
+            3. The "reason" MUST be specific to the content. Do not use generic messages.
+            
+            OUTPUT MUST BE A VALID JSON OBJECT:
+            {
+              "category": "safe" | "spam" | "toxic",
+              "reason": "Specific 1-sentence explanation referencing the post content."
+            }
             
             POST:
             ${text}
         `;
         const result = await model.generateContent(prompt);
-        const category = result.response.text().trim().toLowerCase();
-        return ['safe', 'spam', 'toxic'].includes(category) ? category : 'safe';
+        let categoryAndReason;
+        try {
+            const resultText = result.response.text().trim();
+            const cleanJson = resultText.replace(/```json|```/g, '').trim();
+            categoryAndReason = JSON.parse(cleanJson);
+        } catch (e) {
+            console.error("Failed to parse Gemini JSON:", e);
+            const rawText = result.response.text().toLowerCase();
+            categoryAndReason = { 
+                category: rawText.includes('toxic') ? 'toxic' : (rawText.includes('spam') ? 'spam' : 'safe'),
+                reason: "Auto-evaluated based on platform safety guidelines." 
+            };
+        }
+        
+        return {
+            category: ['safe', 'spam', 'toxic'].includes(categoryAndReason.category) ? categoryAndReason.category : 'safe',
+            reason: categoryAndReason.reason || ""
+        };
     } catch (err) {
         console.error("AI Spam Check Error:", err);
-        return 'safe'; // Default to safe if AI fails
+        return { category: 'safe', reason: "" }; 
     }
 };
 
@@ -180,27 +218,39 @@ router.post('/', auth, async (req, res) => {
             }
         });
 
-        const aiStatus = await checkSpamAI(title, content);
+        const aiResult = await checkSpamAI(title, content);
 
         let finalStatus = 'safe';
         let foundSimilarTo = null;
+        let isAiFlagged = false;
+        let aiReason = "";
 
-        if (aiStatus === 'spam') {
+        if (aiResult.category === 'spam') {
             finalStatus = 'spam';
-        } else if (aiStatus === 'toxic') {
-            finalStatus = 'under review';
+            isAiFlagged = true;
+            aiReason = aiResult.reason;
+        } else if (aiResult.category === 'toxic') {
+            finalStatus = 'toxic';
+            isAiFlagged = true;
+            aiReason = aiResult.reason;
         } else if (maxSimilarity > 80) {
             finalStatus = 'duplicate';
+            isAiFlagged = true;
             foundSimilarTo = similarPostId;
+            aiReason = "This post shares extremely high similarity with an existing thread.";
         } else if (maxSimilarity > 60) {
             finalStatus = 'similar';
+            isAiFlagged = true;
             foundSimilarTo = similarPostId;
+            aiReason = "This post is quite similar to an existing discussion.";
         }
 
         const newPost = new Post({
             title, content, tags, image, video,
             author: req.user.username,
             status: finalStatus,
+            isAiFlagged,
+            aiReason,
             similarTo: foundSimilarTo
         });
 
