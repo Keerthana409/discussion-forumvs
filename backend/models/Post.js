@@ -5,6 +5,7 @@ const postSchema = new mongoose.Schema({
     content: { type: String, required: true },
     tags: [{ type: String }],
     image: { type: String }, // Base64
+    video: { type: String }, // Base64
     author: { type: String, required: true },
     likes: { type: Number, default: 0 },
     dislikes: { type: Number, default: 0 },

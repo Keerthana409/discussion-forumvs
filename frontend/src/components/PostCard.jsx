@@ -19,12 +19,12 @@ const HighlightedText = ({ text, highlight }) => {
   );
 };
 
-const renderComments = (comments, depth, postId, currentUser, refreshPosts, showToast) => {
+const renderComments = (comments, depth, postId, postAuthor, currentUser, refreshPosts, showToast) => {
   if (!comments || comments.length === 0) return null;
-  return comments.map(c => <CommentItem key={c.id} c={c} depth={depth} postId={postId} currentUser={currentUser} refreshPosts={refreshPosts} showToast={showToast} />);
+  return comments.map(c => <CommentItem key={c.id} c={c} depth={depth} postId={postId} postAuthor={postAuthor} currentUser={currentUser} refreshPosts={refreshPosts} showToast={showToast} />);
 };
 
-const CommentItem = ({ c, depth, postId, currentUser, refreshPosts, showToast }) => {
+const CommentItem = ({ c, depth, postId, postAuthor, currentUser, refreshPosts, showToast }) => {
   const [showReplyPanel, setShowReplyPanel] = useState(false);
   const [replyText, setReplyText] = useState('');
 
@@ -63,7 +63,7 @@ const CommentItem = ({ c, depth, postId, currentUser, refreshPosts, showToast })
         </button>
       )}
       
-      {currentUser?.role === 'admin' && (
+      {(currentUser?.role === 'admin' || currentUser?.username === postAuthor || currentUser?.username === c.author) && (
         <button onClick={handleDelete} className="btn btn-sm delete-comment-btn" style={{ padding: 0, marginLeft: '0.5rem', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.8rem' }}>
           <i className="fa-solid fa-trash"></i> Delete
         </button>
@@ -76,7 +76,7 @@ const CommentItem = ({ c, depth, postId, currentUser, refreshPosts, showToast })
         </div>
       )}
 
-      {renderComments(c.replies, depth + 1, postId, currentUser, refreshPosts, showToast)}
+      {renderComments(c.replies, depth + 1, postId, postAuthor, currentUser, refreshPosts, showToast)}
     </div>
   );
 };
@@ -526,6 +526,9 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
           )}
 
           {localPost.image && <img src={localPost.image} alt="Post attachment" className="post-attached-image" loading="lazy" />}
+          {localPost.video && (
+              <video src={localPost.video} controls loop className="post-attached-video" style={{ width: '100%', maxHeight: '500px', borderRadius: 'var(--radius)', marginTop: '0.5rem', marginBottom: '0.5rem', backgroundColor: '#000' }}></video>
+          )}
 
           <div className="post-actions" onClick={e => e.stopPropagation()}>
               <button 
@@ -607,7 +610,7 @@ const PostCard = ({ post, currentUser, refreshPosts, setTagFilter, searchQuery }
                   />
                   <button className="btn btn-primary submit-comment-btn" onClick={handleCommentSubmit}>Reply</button>
               </div>
-              {renderComments(localPost.comments, 1, localPost._id, currentUser, refreshPosts, showToast)}
+              {renderComments(localPost.comments, 1, localPost._id, localPost.author, currentUser, refreshPosts, showToast)}
             </div>
           )}
       </div>

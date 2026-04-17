@@ -101,4 +101,43 @@ Do not add extra explanations.
     }
 });
 
+
+router.post('/generate-metadata', async (req, res) => {
+    try {
+        const { content, type } = req.body;
+        if (!content) return res.status(400).json({ msg: 'Content is required' });
+        
+        const apiKey = process.env.GEMINI_API_KEY;
+        const isPlaceholder = !apiKey || apiKey === 'your_gemini_api_key_here';
+
+        if (isPlaceholder) {
+            let result = "";
+            if (type === 'title') {
+                const words = content.split(' ');
+                result = "Discussion: " + words.slice(0, 4).join(' ') + "...";
+            } else {
+                result = "AI, Generated, Content";
+            }
+            return res.json({ result });
+        }
+
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        let prompt = "";
+        
+        if (type === 'title') {
+            prompt = `Given the following post content, generate a short, catchy, and highly relevant TITLE (maximum 8 words). Do not include quotes or prefixes.\n\nCONTENT:\n${content}\n\nTITLE:`;
+        } else {
+            prompt = `Given the following post content, generate exactly 3-5 relevant TAGS separated by commas. Do not include hashtags or prefixes.\n\nCONTENT:\n${content}\n\nTAGS:`;
+        }
+
+        const genResult = await model.generateContent(prompt);
+        const text = (await genResult.response).text().trim();
+        
+        res.json({ result: text.replace(/^["']|["']$/g, '') });
+    } catch (err) {
+        console.error("Gemini Metadata Error:", err);
+        res.status(500).json({ msg: 'AI Generation failed', error: err.message });
+    }
+});
+
 module.exports = router;

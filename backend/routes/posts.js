@@ -5,35 +5,57 @@ const Post = require('../models/Post');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const mongoose = require('mongoose');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const calculateSpamScore = (text) => {
-    let score = 0;
-    const lowerText = text.toLowerCase();
-    const keywords = [
-        'buy', 'buy 1 get 1 free', 'buy now', 'free', 'click here', 
-        'earn money', 'discount', 'offer', 'prize', 'winner', 
-        'urgent', 'guaranteed', 'cash bonus', 'act now',
-        'make money fast', 'low price', 'best price', 'cryptocurrency',
-        'lottery', 'investment opportunity', 'wealth', 'profit',
-        'subscribe', 'follow me', 'check out my bio'
-    ];
-    keywords.forEach(word => {
-        // use regex to match whole words for short words like 'buy' or 'free' to reduce false positives
-        const regex = new RegExp(`\\b${word}\\b`, 'i');
-        if (regex.test(lowerText)) score += 2;
-    });
-    if (/(http|https|www\.)[^\s]+/i.test(text)) score += 3;
-    const words = text.split(/\s+/);
-    for (let i = 0; i < words.length - 2; i++) {
-        if (words[i] !== "" && words[i] === words[i+1] && words[i+1] === words[i+2]) {
-            score += 2; break;
-        }
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
+const checkSpamAI = async (title, content) => {
+    const text = `Title: ${title}\nContent: ${content}`;
+    const apiKey = process.env.GEMINI_API_KEY;
+    const isPlaceholder = !apiKey || apiKey === 'your_gemini_api_key_here';
+
+    if (isPlaceholder) {
+        // Fallback to basic keyword check if AI key is missing
+        const lowerText = text.toLowerCase();
+        const spamKeywords = ['buy', 'free', 'discount', 'prize', 'earn money', 'bitcoin', 'crypto'];
+        const toxicityKeywords = ['hate', 'kill', 'abuse', 'fraud', 'jerk'];
+        
+        let score = 0;
+        spamKeywords.forEach(word => { if (lowerText.includes(word)) score += 2; });
+        if (score > 3) return 'spam';
+        
+        const hasToxic = toxicityKeywords.some(word => lowerText.includes(word));
+        if (hasToxic) return 'toxic';
+        
+        return 'safe';
     }
-    const upperCount = (text.match(/[A-Z]/g) || []).length;
-    const alphaCount = (text.match(/[a-zA-Z]/g) || []).length;
-    if (alphaCount > 5 && (upperCount / alphaCount) > 0.6) score += 2;
-    return score;
+
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `
+            Analyze the following forum post for spam or toxicity.
+            Classify it into one of these three categories: "safe", "spam", or "toxic".
+            
+            - "spam": Promotional content, ads, bot-like repetitive text, or suspicious links.
+            - "toxic": Hate speech, threats, direct insults, or extreme profanity.
+            - "safe": Normal discussion, questions, or helpful content.
+            
+            Provide only the category name in lowercase.
+            
+            POST:
+            ${text}
+        `;
+        const result = await model.generateContent(prompt);
+        const category = result.response.text().trim().toLowerCase();
+        return ['safe', 'spam', 'toxic'].includes(category) ? category : 'safe';
+    } catch (err) {
+        console.error("AI Spam Check Error:", err);
+        return 'safe'; // Default to safe if AI fails
+    }
 };
+
+const checkBadWords = (text) => /hate|kill|scam|abuse|fraud|jerk|loser/i.test(text);
 
 const calculateSimilarity = (newText, oldText) => {
     const s1 = newText.toLowerCase().split(/\W+/).filter(w=>w.length>2);
@@ -43,8 +65,6 @@ const calculateSimilarity = (newText, oldText) => {
     const unique = new Set([...s1, ...s2]);
     return (intersection.length / unique.size) * 100;
 };
-
-const checkBadWords = (text) => /hate|kill|scam|abuse|fraud|jerk|loser/i.test(text);
 
 // Delete a post by the author (Moved to top to prevent route shadowing)
 router.delete('/:id', auth, async (req, res) => {
@@ -90,9 +110,11 @@ router.put('/:id', auth, async (req, res) => {
             return res.status(403).json({ msg: 'Access denied. You can only edit your own posts.' });
         }
 
-        const { title, content } = req.body;
+        const { title, content, image, video } = req.body;
         if (title) post.title = title;
         if (content) post.content = content;
+        if (image !== undefined) post.image = image;
+        if (video !== undefined) post.video = video;
 
         await post.save();
         res.json(post);
@@ -143,7 +165,7 @@ router.get('/user/:username', async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
     try {
-        const { title, content, tags, image } = req.body;
+        const { title, content, tags, image, video } = req.body;
         const allPosts = await Post.find();
         
         const fullText = title + " " + content;
@@ -158,14 +180,15 @@ router.post('/', auth, async (req, res) => {
             }
         });
 
-        const spamScore = calculateSpamScore(fullText);
-        const hasBadWords = checkBadWords(fullText);
+        const aiStatus = await checkSpamAI(title, content);
 
         let finalStatus = 'safe';
         let foundSimilarTo = null;
 
-        if (spamScore > 3 || hasBadWords) {
+        if (aiStatus === 'spam') {
             finalStatus = 'spam';
+        } else if (aiStatus === 'toxic') {
+            finalStatus = 'under review';
         } else if (maxSimilarity > 80) {
             finalStatus = 'duplicate';
             foundSimilarTo = similarPostId;
@@ -175,9 +198,8 @@ router.post('/', auth, async (req, res) => {
         }
 
         const newPost = new Post({
-            title, content, tags, image,
+            title, content, tags, image, video,
             author: req.user.username,
-            spamScore,
             status: finalStatus,
             similarTo: foundSimilarTo
         });
@@ -380,14 +402,29 @@ router.post('/:id/comment', auth, async (req, res) => {
 
 // (Moved to top)
 
-// Admin Delete Comment recursive logic
+// Delete Comment generic logic
 router.delete('/:id/comment/:commentId', auth, async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ msg: 'Access denied. Admin only.' });
-        }
         let post = await Post.findById(req.params.id);
         if (!post) return res.status(404).json({ msg: 'Post not found' });
+
+        const findComment = (commentsArr, targetId) => {
+            for (let i = 0; i < commentsArr.length; i++) {
+                if (commentsArr[i].id.toString() === targetId.toString()) return commentsArr[i];
+                if (commentsArr[i].replies) {
+                    const found = findComment(commentsArr[i].replies, targetId);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        const targetComment = findComment(post.comments, req.params.commentId);
+        if (!targetComment) return res.status(404).json({ msg: 'Comment not found' });
+
+        if (req.user.role !== 'admin' && req.user.username !== post.author && req.user.username !== targetComment.author) {
+            return res.status(403).json({ msg: 'Access denied. You cannot delete this comment.' });
+        }
 
         const deleteComment = (commentsArr, targetId) => {
             for (let i = 0; i < commentsArr.length; i++) {
